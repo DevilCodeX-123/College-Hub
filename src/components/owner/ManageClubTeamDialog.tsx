@@ -1,0 +1,316 @@
+
+import { useState, useEffect } from 'react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Users, UserCog, UserPlus, Loader2, Edit, Trash2, Crown, Shield } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+
+interface ManageClubTeamDialogProps {
+    open: boolean;
+    onClose: () => void;
+    club: any;
+    collegeUsers: any[];
+}
+
+export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: ManageClubTeamDialogProps) {
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+    const [selectedUser, setSelectedUser] = useState('');
+    const [selectedRole, setSelectedRole] = useState<'coordinator' | 'head' | 'core_member' | 'co_coordinator' | 'co-coordinator'>('core_member');
+    const [customTitle, setCustomTitle] = useState('');
+
+    // Filter potential candidates
+    const candidates = collegeUsers.filter((u: any) => u.role !== 'admin' && u.role !== 'owner');
+
+    // Permission check - Restricted Admins can only add Core Members
+    const isRestrictedAdmin = user?.role === 'club_head' || user?.role === 'club_co_coordinator';
+
+    // Force Core Member role for restricted admins
+    useEffect(() => {
+        if (isRestrictedAdmin) {
+            setSelectedRole('core_member');
+        }
+    }, [isRestrictedAdmin, open]);
+
+    const clubId = club?._id || club?.id;
+
+    const updateTeamMutation = useMutation({
+        mutationFn: async ({ userId, role, customTitle }: { userId: string, role: string, customTitle: string }) => {
+            let apiRole: string = 'student';
+            if (role === 'coordinator') apiRole = 'club_coordinator';
+            else if (role === 'co_coordinator' || role === 'co-coordinator') apiRole = 'club_co_coordinator';
+            else if (role === 'head' || role === 'secretary') apiRole = 'club_head';
+            else if (role === 'core_member') apiRole = 'core_member';
+
+            return api.updateClubCoreTeam(clubId, {
+                userId,
+                role: apiRole,
+                customTitle,
+                requestingUserId: user?.id || user?._id
+            });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['club', clubId] });
+            queryClient.invalidateQueries({ queryKey: ['my-club'] });
+            queryClient.invalidateQueries({ queryKey: ['all-users'] });
+            toast({ title: 'Team Member Updated' });
+            resetForm();
+        },
+        onError: () => {
+            toast({ title: 'Failed to update', variant: 'destructive' });
+        }
+    });
+
+    const removeTeamMutation = useMutation({
+        mutationFn: (userId: string) => api.removeCoreTeamMember(clubId, userId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['my-club'] });
+            queryClient.invalidateQueries({ queryKey: ['all-users'] });
+            toast({ title: 'Member Demoted' });
+        }
+    });
+
+    const handleAssign = () => {
+        if (!selectedUser || !clubId) return;
+        updateTeamMutation.mutate({ userId: selectedUser, role: selectedRole, customTitle });
+    };
+
+    const resetForm = () => {
+        setSelectedUser('');
+        setSelectedRole('core_member');
+        setCustomTitle('');
+    };
+
+    const handleEdit = (member: any) => {
+        setSelectedUser(member.userId);
+        let role: any = 'core_member';
+        if (member.role === 'club_head') role = 'head';
+        if (member.role === 'club_co_coordinator') role = 'co_coordinator';
+        setSelectedRole(role);
+        setCustomTitle(member.customTitle || '');
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onClose}>
+            <DialogContent className="max-w-xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <UserCog className="h-5 w-5" />
+                        Manage Team: {club?.name}
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    <Tabs defaultValue="secretary" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2 mb-4">
+                            <TabsTrigger value="secretary">
+                                <Crown className="h-3.5 w-3.5 mr-2" />
+                                Secretary Panel
+                            </TabsTrigger>
+                            <TabsTrigger value="core">
+                                <Shield className="h-3.5 w-3.5 mr-2" />
+                                Core Team
+                            </TabsTrigger>
+                        </TabsList>
+
+                        <div className="space-y-6">
+                            {/* Form Section */}
+                            <div className="bg-secondary/10 p-4 rounded-xl border-2 border-secondary/20 shadow-sm">
+                                <h4 className="font-black text-xs uppercase tracking-widest mb-4 flex items-center gap-2 text-primary/70">
+                                    <UserPlus className="h-3.5 w-3.5" />
+                                    {selectedUser ? 'Updating Member' : 'Add New Member'}
+                                </h4>
+
+                                <div className="space-y-4">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-black uppercase tracking-widest opacity-70">1. Select Candidate</Label>
+                                        <Select value={selectedUser} onValueChange={setSelectedUser}>
+                                            <SelectTrigger className="h-10 bg-white">
+                                                <SelectValue placeholder="Search student..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {candidates.map((u: any) => (
+                                                    <SelectItem key={u._id || u.id} value={u._id || u.id}>
+                                                        <span className="font-semibold">{u.name}</span>
+                                                        <span className="ml-2 text-[10px] text-muted-foreground opacity-60">({u.email})</span>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-70">2. Assign Role</Label>
+                                            <Select
+                                                value={selectedRole}
+                                                onValueChange={(val: any) => setSelectedRole(val)}
+                                                disabled={
+                                                    (function () {
+                                                        const ROLE_HIERARCHY: Record<string, number> = {
+                                                            'owner': 100,
+                                                            'admin': 5,
+                                                            'club_coordinator': 4,
+                                                            'club_head': 3,
+                                                            'core_member': 2,
+                                                            'student': 1
+                                                        };
+                                                        const myPower = ROLE_HIERARCHY[user?.role || ''] || 0;
+                                                        return myPower <= 2; // Core members or below can't assign roles
+                                                    })()
+                                                }
+                                            >
+                                                <SelectTrigger className="h-10 bg-white">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {(function () {
+                                                        const ROLE_HIERARCHY: Record<string, number> = {
+                                                            'owner': 100,
+                                                            'admin': 5,
+                                                            'club_coordinator': 4,
+                                                            'club_head': 3,
+                                                            'core_member': 2,
+                                                            'student': 1
+                                                        };
+                                                        const myPower = ROLE_HIERARCHY[user?.role || ''] || 0;
+
+                                                        const options = [
+                                                            { value: 'core_member', label: 'Core Team', power: 2 },
+                                                            { value: 'head', label: 'Secretary', power: 3 },
+                                                            { value: 'coordinator', label: 'Coordinator', power: 4 }
+                                                        ];
+
+                                                        return options
+                                                            .filter(opt => user?.role === 'owner' || opt.power < myPower)
+                                                            .map(opt => (
+                                                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                                            ));
+                                                    })()}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-70">3. Custom Title</Label>
+                                            <Input
+                                                value={customTitle}
+                                                onChange={(e) => setCustomTitle(e.target.value)}
+                                                placeholder="e.g. Design Lead"
+                                                className="h-10 bg-white"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2 justify-end pt-2 border-t border-secondary/20">
+                                        {selectedUser && (
+                                            <Button variant="ghost" size="sm" onClick={resetForm} className="text-[10px] font-bold uppercase tracking-widest">
+                                                Cancel Edit
+                                            </Button>
+                                        )}
+                                        <Button
+                                            size="sm"
+                                            onClick={handleAssign}
+                                            disabled={!selectedUser || updateTeamMutation.isPending}
+                                            className="px-6 font-bold shadow-lg"
+                                        >
+                                            {updateTeamMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            {selectedUser ? 'SAVE' : 'CONFIRM ADD'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Current Lists */}
+                            <div className="space-y-6">
+                                <TabsContent value="secretary" className="m-0 space-y-3">
+                                    <h4 className="font-black text-[10px] uppercase tracking-[0.2em] text-blue-600/70 mb-2">Active Secretaries & Heads</h4>
+                                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2">
+                                        {club?.coreTeam?.filter((m: any) => m.role === 'club_head' || m.role === 'club_co_coordinator').map((m: any) => (
+                                            <div key={m.userId} className="p-3 rounded-lg border-2 border-blue-100 bg-blue-50/20 flex items-center justify-between group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-9 w-9 rounded-full bg-blue-600 flex items-center justify-center shadow-lg">
+                                                        <Crown className="h-5 w-5 text-white" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-black text-blue-900 text-sm uppercase tracking-tight">{m.name}</p>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Badge className="bg-blue-600 text-[8px] h-4 py-0 font-bold tracking-tighter shrink-0">{m.role}</Badge>
+                                                            {m.customTitle && <span className="text-[10px] text-blue-600/60 font-medium italic truncate max-w-[100px]">"{m.customTitle}"</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-100/50" onClick={() => handleEdit(m)}>
+                                                        <Edit className="h-3.5 w-3.5 text-blue-600" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10" onClick={() => {
+                                                        if (confirm(`Demote ${m.name}?`)) removeTeamMutation.mutate(m.userId);
+                                                    }}>
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(!club?.coreTeam?.some((m: any) => m.role === 'club_head' || m.role === 'club_co_coordinator')) && (
+                                            <div className="py-8 text-center border-2 border-dashed border-blue-100 rounded-lg text-xs text-blue-400 font-medium">No Secretary Assigned.</div>
+                                        )}
+                                    </div>
+                                </TabsContent>
+
+                                <TabsContent value="core" className="m-0 space-y-3">
+                                    <h4 className="font-black text-[10px] uppercase tracking-[0.2em] text-slate-500/70 mb-2">Core Team Members</h4>
+                                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2">
+                                        {club?.coreTeam?.filter((m: any) => m.role === 'core_member').map((m: any) => (
+                                            <div key={m.userId} className="p-3 rounded-lg border border-slate-200 bg-slate-50/30 flex items-center justify-between group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center">
+                                                        <Shield className="h-4 w-4 text-slate-600" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-slate-800 text-sm">{m.name}</p>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Badge variant="outline" className="text-[8px] h-4 py-0 font-black opacity-60 tracking-widest uppercase shrink-0">{m.role}</Badge>
+                                                            {m.customTitle && <span className="text-[10px] text-muted-foreground italic truncate max-w-[100px]">"{m.customTitle}"</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleEdit(m)}>
+                                                        <Edit className="h-3.5 w-3.5 text-slate-600" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10" onClick={() => {
+                                                        if (confirm(`Remove ${m.name}?`)) removeTeamMutation.mutate(m.userId);
+                                                    }}>
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(!club?.coreTeam?.some((m: any) => m.role === 'core_member')) && (
+                                            <div className="py-8 text-center border border-dashed border-slate-200 rounded-lg text-xs text-slate-400 italic">No core members found.</div>
+                                        )}
+                                    </div>
+                                </TabsContent>
+                            </div>
+                        </div>
+                    </Tabs>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}

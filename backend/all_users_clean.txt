@@ -1,0 +1,4 @@
+Aryan Mehta : club_coordinator : 0 : DTU : aryan@dtu.ac.in
+Priya Sharma : club_head : 0 : DTU : priya@dtu.ac.in
+College Admin : owner : 20 : DTU : admin@college.edu
+Test Super Admin : owner : 1470 : DTU : testadmin@college.edu

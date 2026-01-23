@@ -1,0 +1,56 @@
+const mongoose = require('mongoose');
+
+const userSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    avatar: String,
+    role: {
+        type: String,
+        enum: ['owner', 'student', 'club_member', 'club_coordinator', 'club_co_coordinator', 'club_head', 'core_member', 'admin', 'co_admin'],
+        default: 'student'
+    },
+    customTitle: { type: String }, // For custom titles like "Dean", "Principal", etc.
+    college: String,
+    branch: String,
+    year: String,
+    points: { type: Number, default: 0 },
+    totalEarnedXP: { type: Number, default: 0 },
+    weeklyXP: { type: Number, default: 0 },
+    level: { type: Number, default: 1 },
+    badges: [{
+        name: String,
+        icon: String,
+        description: String,
+        earnedAt: Date
+    }],
+    joinedClubs: [String],
+    blocked: {
+        website: { type: Boolean, default: false },
+        clubs: { type: Boolean, default: false },
+        challenges: { type: Boolean, default: false }
+    },
+    primaryGoal: { type: String, default: 'Software Engineer' },
+    secondaryGoal: { type: String, default: 'Tech Entrepreneur' },
+    skills: { type: [String], default: ['Web Development', 'Problem Solving', 'Leadership'] },
+    activity: [{
+        type: { type: String, enum: ['challenge', 'project', 'event', 'club'] },
+        refId: String,
+        title: String,
+        status: String,
+        timestamp: { type: Date, default: Date.now }
+    }],
+    lastLoginDate: Date
+}, { timestamps: true });
+
+userSchema.virtual('id').get(function () {
+    return this._id.toHexString();
+});
+userSchema.set('toJSON', {
+    virtuals: true
+});
+userSchema.set('toObject', {
+    virtuals: true
+});
+
+module.exports = mongoose.model('User', userSchema);

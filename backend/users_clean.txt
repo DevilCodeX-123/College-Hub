@@ -1,0 +1,4 @@
+Aryan Mehta : club_coordinator : 0 : DTU
+Priya Sharma : club_head : 0 : DTU
+College Admin : owner : 20 : DTU
+Test Super Admin : owner : 1470 : DTU
