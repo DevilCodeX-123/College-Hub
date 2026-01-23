@@ -1,8 +1,7 @@
 import axios from 'axios';
 import { Club, Challenge, Project, User } from '@/types';
 
-const API_URL = import.meta.env.VITE_API_URL || '/api';
-
+const API_URL = 'https://college-hub-o4g3.onrender.com/api';
 // Add auth header to requests
 const getAuthDetails = () => {
     const token = localStorage.getItem('token');
