@@ -3,6 +3,7 @@ import { Club, Challenge, Project, User } from '@/types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
+
 // Add auth header to requests
 const getAuthDetails = () => {
     const token = localStorage.getItem('token');
