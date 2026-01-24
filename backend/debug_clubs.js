@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 const Club = require('./models/Club');
 
-const URI = 'mongodb+srv://dbadmin:Devil%40123@cluster0.wrxge6j.mongodb.net/college-chronicle?retryWrites=true&w=majority&appName=Cluster0';
+const dotenv = require('dotenv');
+dotenv.config();
+
+const URI = process.env.MONGO_URI;
 
 async function inspectClubs() {
     console.log('Starting inspection...');

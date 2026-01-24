@@ -90,16 +90,7 @@ export default function Login() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <div className="flex justify-between items-center ml-1">
-                                    <label className="text-sm font-semibold">Password</label>
-                                    <button
-                                        type="button"
-                                        onClick={() => setForgotPasswordOpen(true)}
-                                        className="text-xs text-primary hover:underline"
-                                    >
-                                        Forgot password?
-                                    </button>
-                                </div>
+                                <label className="text-sm font-semibold ml-1">Password</label>
                                 <div className="relative group">
                                     <Input
                                         type={showPassword ? "text" : "password"}

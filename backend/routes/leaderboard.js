@@ -14,15 +14,20 @@ router.get('/college', async (req, res) => {
             const requester = await User.findById(requestingUserId);
             if (requester && requester.role !== 'owner') {
                 // Determine college for isolation
-                query.college = requester.college;
+                if (requester.college) {
+                    const collegeName = requester.college.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
+                }
             }
         }
 
         if (college && college !== 'undefined' && college !== 'null') {
             const cleanCollege = college.trim();
             // If query.college is already set by bubble logic, respect it
-            if (!query.college || query.college === cleanCollege) {
-                query.college = cleanCollege;
+            // Otherwise, apply fuzzy match
+            if (!query.college) {
+                const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
             }
         }
 
@@ -89,15 +94,20 @@ router.get('/clubs', async (req, res) => {
             const requester = await User.findById(requestingUserId);
             if (requester && requester.role !== 'owner') {
                 // Determine college for isolation
-                query.college = requester.college;
+                if (requester.college) {
+                    const collegeName = requester.college.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
+                }
             }
         }
 
         if (college && college !== 'undefined' && college !== 'null') {
             const cleanCollege = college.trim();
             // If query.college is already set by bubble logic, respect it
-            if (!query.college || query.college === cleanCollege) {
-                query.college = cleanCollege;
+            // Otherwise, apply fuzzy match
+            if (!query.college) {
+                const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
             }
         }
 

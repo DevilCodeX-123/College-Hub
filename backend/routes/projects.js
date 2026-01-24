@@ -17,12 +17,17 @@ router.get('/', async (req, res) => {
             const requester = await User.findById(requestingUserId);
             if (requester && requester.role !== 'owner') {
                 // Force filter to requester's college bubble
-                query.college = requester.college;
+                if (requester.college) {
+                    const collegeName = requester.college.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
+                }
             }
         }
 
         if (college && (!query.college || query.college === college)) {
-            query.college = college;
+            const cleanCollege = college.trim();
+            const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
         }
         if (clubId) {
             query.clubId = clubId;
@@ -32,7 +37,7 @@ router.get('/', async (req, res) => {
         }
 
         // Return projects, sorting by newest first
-        const projects = await Project.find(query).sort({ createdAt: -1 });
+        const projects = await Project.find(query).sort({ createdAt: -1 }).populate('team', 'name email');
         res.json(projects);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -42,13 +47,17 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { requestingUserId } = req.query;
-        const project = await Project.findById(req.params.id);
+        const project = await Project.findById(req.params.id).populate('team', 'name email');
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
         if (requestingUserId) {
             const requester = await User.findById(requestingUserId);
-            if (requester && requester.role !== 'owner' && requester.college !== project.college) {
-                return res.status(403).json({ message: 'Access Denied: Project is in a different college bubble' });
+            if (requester && requester.role !== 'owner') {
+                const userCollege = (requester.college || '').trim().toLowerCase();
+                const projectCollege = (project.college || '').trim().toLowerCase();
+                if (userCollege !== projectCollege) {
+                    return res.status(403).json({ message: 'Access Denied: Project is in a different college bubble' });
+                }
             }
         }
 
@@ -79,7 +88,7 @@ router.post('/', async (req, res) => {
             requestedBy,
             clubId,
             clubName,
-            college: club.college,
+            college: club.college ? club.college.trim() : null,
             status: 'pending',
             team: [requestedBy] // Creator is first member
         });
@@ -137,7 +146,7 @@ router.post('/:id/approve', async (req, res) => {
         });
         await notification.save();
 
-        res.json({ message: 'Project approved', project });
+        res.json({ message: 'Project approved', project: await Project.findById(project._id).populate('team', 'name email') });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -207,7 +216,7 @@ router.post('/join-by-code', async (req, res) => {
 
         await user.save();
 
-        res.json({ message: 'Successfully joined project team', user, project });
+        res.json({ message: 'Successfully joined project team', user, project: await Project.findById(project._id).populate('team', 'name email') });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -461,6 +470,157 @@ router.delete('/:id', async (req, res) => {
         }
 
         res.json({ message: 'Project permanently deleted' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// UPDATE PROJECT PROGRESS (Leader Only)
+router.patch('/:id/progress', async (req, res) => {
+    try {
+        const { progress, requestingUserId } = req.body;
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        // Check if requester is the leader
+        if (project.requestedBy !== requestingUserId) {
+            return res.status(403).json({ message: 'Only the project leader can update progress' });
+        }
+
+        project.progress = progress;
+        await project.save();
+        res.json(project);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ADD TIME GOAL (Leader Only)
+router.post('/:id/goals', async (req, res) => {
+    try {
+        const { title, deadline, requestingUserId } = req.body;
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (project.requestedBy !== requestingUserId) {
+            return res.status(403).json({ message: 'Only the project leader can set goals' });
+        }
+
+        project.timeGoals.push({
+            title,
+            deadline,
+            assigneeId: req.body.assigneeId,
+            assigneeName: req.body.assigneeName
+        });
+        await project.save();
+        res.status(201).json(project);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// UPDATE GOAL STATUS (Leader Only)
+router.patch('/:id/goals/:goalId', async (req, res) => {
+    try {
+        const { status, requestingUserId } = req.body;
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (project.requestedBy !== requestingUserId) {
+            return res.status(403).json({ message: 'Only the project leader can update goals' });
+        }
+
+        const goal = project.timeGoals.id(req.params.goalId);
+        if (!goal) return res.status(404).json({ message: 'Goal not found' });
+
+        goal.status = status;
+        await project.save();
+        res.json(project);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// SUBMIT GOAL (Assignee Only)
+router.post('/:id/goals/:goalId/submit', async (req, res) => {
+    try {
+        const { submissionLink, requestingUserId } = req.body;
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        const goal = project.timeGoals.id(req.params.goalId);
+        if (!goal) return res.status(404).json({ message: 'Goal not found' });
+
+        if (goal.assigneeId !== requestingUserId) {
+            return res.status(403).json({ message: 'Only the assigned user can submit this goal' });
+        }
+
+        goal.submissionLink = submissionLink;
+        goal.status = 'completed';
+        goal.completedAt = new Date();
+
+        await project.save();
+        res.json(project);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// DELETE TIME GOAL (Leader Only)
+router.delete('/:id/goals/:goalId', async (req, res) => {
+    try {
+        const { requestingUserId } = req.query;
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (project.requestedBy !== requestingUserId) {
+            return res.status(403).json({ message: 'Only the project leader can remove goals' });
+        }
+
+        project.timeGoals.pull({ _id: req.params.goalId });
+        await project.save();
+        res.json(project);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ADD RESOURCE LINK (Any Team Member)
+router.post('/:id/resources', async (req, res) => {
+    try {
+        const { title, description, url, addedBy, addedByName } = req.body;
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (!project.team.includes(addedBy)) {
+            return res.status(403).json({ message: 'Only team members can add resources' });
+        }
+
+        project.resources.push({ title, description, url, addedBy, addedByName });
+        await project.save();
+        res.status(201).json(project);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// DELETE RESOURCE LINK (AddedBy or Leader)
+router.delete('/:id/resources/:resourceId', async (req, res) => {
+    try {
+        const { requestingUserId } = req.query;
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        const resource = project.resources.id(req.params.resourceId);
+        if (!resource) return res.status(404).json({ message: 'Resource not found' });
+
+        if (resource.addedBy.toString() !== requestingUserId && project.requestedBy !== requestingUserId) {
+            return res.status(403).json({ message: 'Not authorized to remove this resource' });
+        }
+
+        project.resources.pull({ _id: req.params.resourceId });
+        await project.save();
+        res.json(project);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

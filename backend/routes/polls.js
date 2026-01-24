@@ -17,7 +17,9 @@ router.get('/', async (req, res) => {
         }
 
         if (college) {
-            query.college = college;
+            const cleanCollege = college.trim();
+            const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
         }
 
         if (clubId) {
@@ -75,7 +77,7 @@ router.post('/', async (req, res) => {
             targetRoles: targetRoles || ['all'],
             specificEmails: specificEmails || [],
             clubId: clubId || null,
-            college: college || null,
+            college: college ? college.trim() : null,
             expiresAt: expiresAt || null
         });
 

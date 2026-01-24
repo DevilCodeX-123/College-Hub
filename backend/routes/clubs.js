@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Club = require('../models/Club');
+const User = require('../models/User');
 
 // GET all clubs
 router.get('/', async (req, res) => {
@@ -8,12 +9,15 @@ router.get('/', async (req, res) => {
         const { college, requestingUserId } = req.query;
         let query = {};
 
-        const User = require('../models/User');
+
         if (requestingUserId) {
             const requester = await User.findById(requestingUserId);
             if (requester && requester.role !== 'owner') {
-                // Force filter to requester's college bubble
-                query.college = requester.college;
+                // Force filter to requester's college bubble (Case Insensitive)
+                if (requester.college) {
+                    const collegeName = requester.college.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    query.college = { $regex: new RegExp(`^${collegeName}$`, 'i') };
+                }
             }
         }
 
@@ -24,8 +28,21 @@ router.get('/', async (req, res) => {
 
         // Use raw collection to bypass stale schema
         const clubs = await Club.collection.find(query).toArray();
-        const formattedClubs = clubs.map(c => ({ ...c, id: c._id.toString() }));
-        res.json(formattedClubs);
+
+
+        // Enhance clubs with actual member counts from User collection
+        const enhancedClubs = await Promise.all(clubs.map(async (c) => {
+            const actualCount = await User.countDocuments({
+                joinedClubs: c._id.toString()
+            });
+            return {
+                ...c,
+                id: c._id.toString(),
+                memberCount: actualCount // Override with real-time count
+            };
+        }));
+
+        res.json(enhancedClubs);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -34,7 +51,7 @@ router.get('/', async (req, res) => {
 // GET club by coordinator ID
 router.get('/coordinator/:userId', async (req, res) => {
     try {
-        const User = require('../models/User');
+
         const requestingUser = await User.findById(req.query.requestingUserId || req.params.userId);
 
         if (requestingUser && requestingUser.role === 'owner') {
@@ -54,12 +71,17 @@ router.get('/coordinator/:userId', async (req, res) => {
 
         // Bubble check: If requestingUser is not the coordinator, check college
         if (requestingUser && requestingUser.role !== 'owner' && requestingUser._id.toString() !== req.params.userId) {
-            if (requestingUser.college !== club.college) {
+            const userCollege = requestingUser.college ? requestingUser.college.trim().toLowerCase() : '';
+            const clubCollege = club.college ? club.college.trim().toLowerCase() : '';
+            if (userCollege !== clubCollege) {
                 return res.status(403).json({ message: 'Access Denied: Club is in a different college bubble' });
             }
         }
 
         club.id = club._id.toString();
+        // Accurate member count
+        const actualCount = await User.countDocuments({ joinedClubs: club.id });
+        club.memberCount = actualCount;
         res.json(club);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -74,15 +96,23 @@ router.get('/:id', async (req, res) => {
         const club = await Club.collection.findOne({ _id: new mongoose.Types.ObjectId(req.params.id) });
         if (!club) return res.status(404).json({ message: 'Club not found' });
 
-        const User = require('../models/User');
+
         if (requestingUserId) {
             const requester = await User.findById(requestingUserId);
-            if (requester && requester.role !== 'owner' && requester.college !== club.college) {
-                return res.status(403).json({ message: 'Access Denied: Club is in a different college bubble' });
+            if (requester && requester.role !== 'owner') {
+                const userCollege = requester.college ? requester.college.trim().toLowerCase() : '';
+                const clubCollege = club.college ? club.college.trim().toLowerCase() : '';
+
+                if (userCollege !== clubCollege) {
+                    return res.status(403).json({ message: 'Access Denied: Club is in a different college bubble' });
+                }
             }
         }
 
         club.id = club._id.toString();
+        // Accurate member count
+        const actualCount = await User.countDocuments({ joinedClubs: club.id });
+        club.memberCount = actualCount;
         res.json(club);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -97,6 +127,17 @@ router.post('/', async (req, res) => {
     console.log(`Creating new club: "${req.body.name}" for college: "${req.body.college}"`);
     const club = new Club(req.body);
     try {
+        // If a coordinator is assigned, add them as a member immediately
+        if (req.body.coordinatorId) {
+            const User = require('../models/User');
+            const coordinator = await User.findById(req.body.coordinatorId);
+            if (coordinator && !coordinator.joinedClubs.includes(club._id.toString())) {
+                coordinator.joinedClubs.push(club._id.toString());
+                await coordinator.save();
+                club.memberCount = 1; // Initialize count
+            }
+        }
+
         const newClub = await club.save();
         res.status(201).json(newClub);
     } catch (err) {
@@ -417,7 +458,10 @@ router.post('/:id/core-team', async (req, res) => {
             if (requester.role !== 'owner') {
                 if (requester.role === 'admin') {
                     // Admin must be in same college as club
-                    if (requester.college !== club.college) {
+                    const userCollege = requester.college ? requester.college.trim().toLowerCase() : '';
+                    const clubCollege = club.college ? club.college.trim().toLowerCase() : '';
+
+                    if (userCollege !== clubCollege) {
                         return res.status(403).json({ message: 'Access Denied: This club belongs to a different college bubble' });
                     }
                 } else {

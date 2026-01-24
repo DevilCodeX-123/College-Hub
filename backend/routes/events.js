@@ -12,7 +12,9 @@ router.get('/', async (req, res) => {
         const { college } = req.query;
         let query = {};
         if (college) {
-            query.college = college;
+            const cleanCollege = college.trim();
+            const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
         }
         const events = await Event.find(query).sort({ date: 1 });
         res.json(events);
@@ -23,6 +25,7 @@ router.get('/', async (req, res) => {
 
 // CREATE an event
 router.post('/', async (req, res) => {
+    if (req.body.college) req.body.college = req.body.college.trim();
     const event = new Event(req.body);
     try {
         const newEvent = await event.save();

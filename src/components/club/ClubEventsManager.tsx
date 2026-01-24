@@ -917,7 +917,7 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                                 </Badge>
                                             </div>
 
-                                            <div className="flex justify-between items-center pt-2 mt-auto border-t border-purple-50/50">
+                                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2 mt-auto border-t border-purple-50/50">
                                                 <button
                                                     onClick={() => {
                                                         setViewRegistrationsEvent(ann);
@@ -929,15 +929,15 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                                     <span className="text-purple-900 underline decoration-purple-200 underline-offset-2">{ann.registrations?.length || 0}</span> Registered
                                                 </button>
 
-                                                <div className="flex gap-2">
+                                                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
-                                                        className={ann.stopRegistration ? "h-8 text-xs font-bold text-green-600 border-green-200 hover:bg-green-50" : "h-8 text-xs font-bold text-amber-600 border-amber-200 hover:bg-amber-50"}
+                                                        className={ann.stopRegistration ? "flex-1 sm:flex-none h-8 text-[10px] sm:text-xs font-bold text-green-600 border-green-200 hover:bg-green-50" : "flex-1 sm:flex-none h-8 text-[10px] sm:text-xs font-bold text-amber-600 border-amber-200 hover:bg-amber-50"}
                                                         onClick={() => stopRegistrationMutation.mutate({ id: ann._id, stop: !ann.stopRegistration })}
                                                     >
                                                         {ann.stopRegistration ? (
-                                                            <><RefreshCw className="h-3 w-3 mr-1" /> Resume Reg</>
+                                                            <><RefreshCw className="h-3 w-3 mr-1" /> Resume</>
                                                         ) : (
                                                             <><Ban className="h-3 w-3 mr-1" /> Stop Reg</>
                                                         )}
@@ -945,7 +945,7 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
-                                                        className="h-8 text-xs font-bold text-blue-600 border-blue-200 hover:bg-blue-50"
+                                                        className="flex-1 sm:flex-none h-8 text-[10px] sm:text-xs font-bold text-blue-600 border-blue-200 hover:bg-blue-50"
                                                         onClick={() => {
                                                             setCompletingEventId(ann._id);
                                                             setEventReport({
@@ -969,7 +969,7 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                                             setIsAddingEvent(true);
                                                         }}
                                                     >
-                                                        <CheckCircle className="h-3 w-3 mr-1" /> Complete Event
+                                                        <CheckCircle className="h-3 w-3 mr-1" /> Complete
                                                     </Button>
                                                 </div>
                                             </div>
@@ -980,12 +980,12 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                         </div>
                     )}
 
-                    <div className="flex gap-4">
-                        <Button onClick={() => setIsAnnouncingEvent(true)} className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold h-12">
-                            <Megaphone className="h-5 w-5 mr-2" /> Announce a New Event
+                    <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                        <Button onClick={() => setIsAnnouncingEvent(true)} className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black h-11 text-xs uppercase tracking-widest">
+                            <Megaphone className="h-4 w-4 mr-2" /> Announce New Event
                         </Button>
-                        <Button onClick={() => setIsAddingEvent(true)} className="flex-1 border-dashed h-12" variant="outline">
-                            <Plus className="h-5 w-5 mr-2" /> Add Detailed Event Report
+                        <Button onClick={() => setIsAddingEvent(true)} className="flex-1 border-dashed h-11 font-bold text-xs" variant="outline">
+                            <Plus className="h-4 w-4 mr-2" /> Detailed Report
                         </Button>
                     </div>
                 </>
@@ -1076,28 +1076,28 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                     {item.description}
                                 </p>
 
-                                <div className="grid grid-cols-2 gap-3 py-3 border-y text-xs text-muted-foreground">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-3 border-y text-xs text-muted-foreground">
                                     {item.location && (
                                         <div className="flex items-center gap-2">
-                                            <MapPin className="h-3.5 w-3.5 text-red-500" />
+                                            <MapPin className="h-3.5 w-3.5 text-red-500 shrink-0" />
                                             <span className="truncate">{item.location}</span>
                                         </div>
                                     )}
                                     {item.duration && (
                                         <div className="flex items-center gap-2">
-                                            <Clock className="h-3.5 w-3.5 text-blue-500" />
+                                            <Clock className="h-3.5 w-3.5 text-blue-500 shrink-0" />
                                             <span>{item.duration}</span>
                                         </div>
                                     )}
                                     {item.participantCount > 0 && (
                                         <div className="flex items-center gap-2">
-                                            <Users className="h-3.5 w-3.5 text-green-500" />
+                                            <Users className="h-3.5 w-3.5 text-green-500 shrink-0" />
                                             <span>{item.participantCount}+ attendees</span>
                                         </div>
                                     )}
                                     {item.driveLink && (
                                         <a href={item.driveLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-600 hover:underline font-bold">
-                                            <ExternalLink className="h-3.5 w-3.5" /> Highlights
+                                            <ExternalLink className="h-3.5 w-3.5 shrink-0" /> Highlights
                                         </a>
                                     )}
                                 </div>

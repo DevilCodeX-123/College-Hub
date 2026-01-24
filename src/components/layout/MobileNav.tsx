@@ -54,7 +54,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
   return (
     <div className="lg:hidden fixed inset-0 top-16 bg-background opacity-100 z-50 animate-fade-in shadow-xl">
-      <nav className="p-4 space-y-2 h-[calc(100vh-4rem)] overflow-y-auto">
+      <nav className="p-4 pb-24 space-y-2 h-[calc(100vh-4rem)] overflow-y-auto">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
@@ -94,34 +94,34 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
               </NavLink>
             )}
 
-            {(user?.role === 'owner' || user?.role === 'admin' || user?.role === 'co_admin') && (
+            {(user?.role === 'admin' || user?.role === 'co_admin') && (
               <NavLink to="/admin" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
                 <Shield className="h-5 w-5" />
                 <span>College Admin Panel</span>
               </NavLink>
             )}
 
-            {(user?.role === 'owner' || user?.role === 'club_coordinator' || user?.role === 'club_co_coordinator') && (
+            {(user?.role === 'club_coordinator' || user?.role === 'club_co_coordinator') && (
               <NavLink to="/club-coordinator" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
                 <Shield className="h-5 w-5" />
                 <span>Club Coordinator Panel</span>
               </NavLink>
             )}
 
-            {(user?.role === 'owner' || user?.role === 'club_head' || user?.role === 'club_co_coordinator') && (
+            {user?.role === 'club_head' && (
               <NavLink to="/club-head" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
                 <Target className="h-5 w-5" />
                 <span>Club Secretary Panel</span>
               </NavLink>
             )}
 
-            {(user?.role === 'owner' || user?.role === 'core_member') && (
+            {user?.role === 'core_member' && (
               <NavLink to="/core-team" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
                 <Users className="h-5 w-5" />
-                <span>Core Team</span>
+                <span>Core Team Panel</span>
               </NavLink>
             )}
-          </> // Added closing tag
+          </>
         )}
       </nav>
     </div>

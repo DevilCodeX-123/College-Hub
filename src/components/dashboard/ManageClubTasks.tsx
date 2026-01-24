@@ -141,16 +141,16 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
     return (
         <div className="space-y-6">
             {/* Header Section */}
-            <div className={`p-6 rounded-3xl border shadow-sm transition-all duration-500 ${readOnly ? 'bg-slate-50 border-slate-200' : 'bg-gradient-to-br from-primary/10 via-background to-primary/5 border-primary/20'}`}>
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className={`p-4 sm:p-6 rounded-2xl sm:rounded-3xl border shadow-sm transition-all duration-500 ${readOnly ? 'bg-slate-50 border-slate-200' : 'bg-gradient-to-br from-primary/10 via-background to-primary/5 border-primary/20'}`}>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
                     <div className="space-y-1">
                         <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-xl ${readOnly ? 'bg-slate-200' : 'bg-primary/20'}`}>
-                                {readOnly ? <Shield className="h-6 w-6 text-slate-600" /> : <Zap className="h-6 w-6 text-primary fill-primary/20" />}
+                                {readOnly ? <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-slate-600" /> : <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-primary fill-primary/20" />}
                             </div>
-                            <h3 className="text-2xl font-black tracking-tight">Task Hub</h3>
+                            <h3 className="text-xl sm:text-2xl font-black tracking-tight">Task Hub</h3>
                         </div>
-                        <p className="text-sm text-muted-foreground font-medium">
+                        <p className="text-xs sm:text-sm text-muted-foreground font-medium">
                             {readOnly
                                 ? "Complete audit trail of all club activities and submissions."
                                 : `Activity dashboard for ${clubName || 'your club'}. Manage lifecycle and verify integrity.`}
@@ -160,8 +160,8 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                     {!readOnly && (
                         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                             <DialogTrigger asChild>
-                                <Button className="h-12 px-6 rounded-2xl gap-2 shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all font-bold">
-                                    <Plus className="h-5 w-5" /> Launch Activity
+                                <Button className="w-full sm:w-auto h-11 sm:h-12 px-6 rounded-xl sm:rounded-2xl gap-2 shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all font-bold text-sm">
+                                    <Plus className="h-4 w-4 sm:h-5 sm:w-5" /> Launch Activity
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-[550px] rounded-[2rem] border-2 shadow-2xl">
@@ -247,13 +247,13 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                     )}
                 </div>
 
-                <div className="mt-8 relative max-w-2xl">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <div className="mt-6 sm:mt-8 relative w-full max-w-2xl">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                     <Input
-                        placeholder="Search tasks by title or category..."
+                        placeholder="Search tasks..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-12 pl-12 rounded-2xl bg-background border-2 border-primary/10 focus:border-primary transition-all font-medium"
+                        className="h-11 sm:h-12 pl-10 sm:pl-12 rounded-xl sm:rounded-2xl bg-background border-2 border-primary/10 focus:border-primary transition-all text-sm font-medium"
                     />
                 </div>
             </div>
@@ -312,27 +312,27 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                                             </div>
 
                                             {/* Right Metrics */}
-                                            <div className="md:w-[320px] bg-muted/30 md:border-l flex p-6 items-center gap-4">
+                                            <div className="md:w-[280px] bg-muted/20 md:border-l flex flex-row md:flex-row items-center justify-between md:justify-start p-4 md:p-6 gap-4">
                                                 <div className="flex-1 grid grid-cols-2 gap-2">
-                                                    <div className="bg-background rounded-2xl p-3 border flex flex-col items-center justify-center space-y-0.5">
-                                                        <span className="text-[10px] font-black uppercase text-muted-foreground">Submits</span>
-                                                        <span className="text-lg font-black">{taskSubmissions.length}</span>
+                                                    <div className="bg-background rounded-xl sm:rounded-2xl p-2 sm:p-3 border flex flex-col items-center justify-center space-y-0.5">
+                                                        <span className="text-[8px] sm:text-[10px] font-black uppercase text-muted-foreground">Submits</span>
+                                                        <span className="text-sm sm:text-lg font-black">{taskSubmissions.length}</span>
                                                     </div>
-                                                    <div className="bg-background rounded-2xl p-3 border flex flex-col items-center justify-center space-y-0.5">
-                                                        <span className="text-[10px] font-black uppercase text-emerald-600">Accepted</span>
-                                                        <span className="text-lg font-black text-emerald-700">{approvedCount}</span>
+                                                    <div className="bg-background rounded-xl sm:rounded-2xl p-2 sm:p-3 border flex flex-col items-center justify-center space-y-0.5">
+                                                        <span className="text-[8px] sm:text-[10px] font-black uppercase text-emerald-600 leading-none text-center">Accepted</span>
+                                                        <span className="text-sm sm:text-lg font-black text-emerald-700">{approvedCount}</span>
                                                     </div>
                                                 </div>
                                                 {pendingCount > 0 && !readOnly ? (
-                                                    <div className="h-14 w-14 rounded-full bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/30 animate-pulse relative">
-                                                        <AlertCircle className="h-7 w-7" />
-                                                        <span className="absolute -top-1 -right-1 h-6 min-w-[24px] px-1.5 rounded-full bg-white text-orange-600 border-2 border-orange-500 flex items-center justify-center text-[10px] font-black">
+                                                    <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/30 animate-pulse relative shrink-0">
+                                                        <AlertCircle className="h-5 w-5 sm:h-7 sm:w-7" />
+                                                        <span className="absolute -top-1 -right-1 h-4 sm:h-6 min-w-[16px] sm:min-w-[24px] px-1 rounded-full bg-white text-orange-600 border-2 border-orange-500 flex items-center justify-center text-[8px] sm:text-[10px] font-black">
                                                             {pendingCount}
                                                         </span>
                                                     </div>
                                                 ) : (
-                                                    <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all">
-                                                        <ChevronRight className="h-6 w-6" />
+                                                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all shrink-0">
+                                                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
                                                     </div>
                                                 )}
                                             </div>
@@ -342,18 +342,18 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                             </DialogTrigger>
 
                             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] border-2 shadow-2xl p-0 overflow-hidden">
-                                <div className="h-32 bg-gradient-to-r from-primary/20 via-primary/10 to-transparent p-8 flex items-end justify-between border-b">
+                                <div className="h-auto min-h-[120px] bg-gradient-to-r from-primary/20 via-primary/10 to-transparent p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-end justify-between border-b gap-4">
                                     <div className="space-y-1">
                                         <Badge className="bg-white text-primary border-primary/20 mb-2 font-bold">{t.category}</Badge>
-                                        <h2 className="text-3xl font-black tracking-tight">{t.title}</h2>
+                                        <h2 className="text-xl sm:text-3xl font-black tracking-tight leading-tight">{t.title}</h2>
                                     </div>
-                                    <div className="text-right">
-                                        <div className="text-4xl font-black text-primary">+{20 + (approvedCount * 5)}</div>
-                                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Points Earned by Club</p>
+                                    <div className="flex flex-col items-start sm:items-end">
+                                        <div className="text-2xl sm:text-4xl font-black text-primary">+{20 + (approvedCount * 5)}</div>
+                                        <p className="text-[9px] sm:text-[10px] font-black uppercase text-muted-foreground tracking-widest">Points Earned by Club</p>
                                     </div>
                                 </div>
 
-                                <div className="p-8 space-y-8">
+                                <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
                                     <div className="grid md:grid-cols-3 gap-8">
                                         {/* Main Content */}
                                         <div className="md:col-span-2 space-y-8">

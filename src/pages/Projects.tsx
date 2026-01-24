@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Plus, Clock, Users, ChevronRight, Loader2, Key, Shield, MessageSquare, CheckCircle } from 'lucide-react';
+import { Plus, Clock, Users, ChevronRight, Loader2, Key, Shield, MessageSquare, CheckCircle, Target, Link as LinkIcon, Trash2, ExternalLink } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
 import { format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -30,6 +31,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function Projects() {
   const { user } = useAuth();
@@ -157,6 +165,93 @@ export default function Projects() {
     },
   });
 
+  const updateProgressMutation = useMutation({
+    mutationFn: ({ id, progress }: { id: string, progress: number }) =>
+      api.updateProjectProgress(id, progress, user?.id || ''),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSelectedProject(updated);
+      toast({ title: 'Progress Updated' });
+    }
+  });
+
+  const addGoalMutation = useMutation({
+    mutationFn: (goal: any) => api.addProjectGoal(selectedProject?.id || selectedProject?._id, { ...goal, requestingUserId: user?.id }),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSelectedProject(updated);
+      setGoalData({ title: '', deadline: '', assigneeId: '' });
+      toast({ title: 'Goal Added' });
+    }
+  });
+
+  const updateGoalMutation = useMutation({
+    mutationFn: ({ goalId, status }: { goalId: string, status: string }) =>
+      api.updateProjectGoal(selectedProject?.id || selectedProject?._id, goalId, status, user?.id || ''),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSelectedProject(updated);
+    }
+  });
+
+  const deleteGoalMutation = useMutation({
+    mutationFn: (goalId: string) =>
+      api.deleteProjectGoal(selectedProject?.id || selectedProject?._id, goalId, user?.id || ''),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSelectedProject(updated);
+      toast({ title: 'Goal Removed' });
+    }
+  });
+
+  const submitGoalMutation = useMutation({
+    mutationFn: ({ goalId, link }: { goalId: string, link: string }) =>
+      api.submitProjectGoal(selectedProject?.id || selectedProject?._id, goalId, link, user?.id || ''),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSelectedProject(updated);
+      setSubmissionLink('');
+      setSubmittingGoalId(null);
+      toast({ title: 'Goal Submitted!' });
+    }
+  });
+
+  const addResourceMutation = useMutation({
+    mutationFn: (resource: any) =>
+      api.addProjectResource(selectedProject?.id || selectedProject?._id, {
+        ...resource,
+        addedBy: user?.id,
+        addedByName: user?.name
+      }),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSelectedProject(updated);
+      setResourceData({ title: '', description: '', url: '' });
+      toast({ title: 'Resource Added' });
+    }
+  });
+
+  const deleteResourceMutation = useMutation({
+    mutationFn: (resourceId: string) =>
+      api.deleteProjectResource(selectedProject?.id || selectedProject?._id, resourceId, user?.id || ''),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSelectedProject(updated);
+      toast({ title: 'Resource Removed' });
+    }
+  });
+
+  const [goalData, setGoalData] = useState({ title: '', deadline: '', assigneeId: '' });
+  const [resourceData, setResourceData] = useState({ title: '', description: '', url: '' });
+  const [tempProgress, setTempProgress] = useState(0);
+  const [submissionLink, setSubmissionLink] = useState('');
+  const [submittingGoalId, setSubmittingGoalId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedProject) setTempProgress(selectedProject.progress || 0);
+  }, [selectedProject]);
+
+
 
 
   const handleProposalSubmit = (e: React.FormEvent) => {
@@ -180,7 +275,14 @@ export default function Projects() {
   };
 
   const isMember = (project: any) => {
-    return project.team?.includes(user?.id) || user?.role === 'admin' || user?.id === project.requestedBy;
+    return project.team?.some((m: any) => (typeof m === 'string' ? m : m.id || m._id) === user?.id) ||
+      user?.role === 'admin' ||
+      (typeof project.requestedBy === 'string' ? project.requestedBy : project.requestedBy?.id || project.requestedBy?._id) === user?.id;
+  };
+
+  const isLeader = (project: any) => {
+    const leaderId = typeof project.requestedBy === 'string' ? project.requestedBy : project.requestedBy?.id || project.requestedBy?._id;
+    return user?.id === leaderId;
   };
 
   const handleViewDetails = (project: any) => {
@@ -368,45 +470,337 @@ export default function Projects() {
 
                 <div className="space-y-6 pt-4">
                   {isMember(selectedProject) ? (
-                    <>
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <Label className="text-muted-foreground">Problem Statement</Label>
-                          <p className="text-sm leading-relaxed break-words">{selectedProject.problemStatement || selectedProject.description}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-muted-foreground">The Solution/Idea</Label>
-                          <p className="text-sm leading-relaxed break-words">{selectedProject.idea || "No specific idea details provided yet."}</p>
-                        </div>
-                      </div>
+                    <Tabs defaultValue="overview" className="w-full">
+                      <TabsList className="grid w-full grid-cols-3 mb-4">
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="management">Manage</TabsTrigger>
+                        <TabsTrigger value="resources">Links</TabsTrigger>
+                      </TabsList>
 
-                      <div className="space-y-3 border-t pt-4">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-muted-foreground">Team Members ({selectedProject.team?.length || 0} / {selectedProject.memberLimit})</Label>
-                          {selectedProject.joinCode && (
-                            <Badge variant="secondary" className="font-mono">Code: {selectedProject.joinCode}</Badge>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedProject.team?.map((memberId: string, i: number) => (
-                            <Badge key={i} variant="outline" className="flex items-center gap-1 py-1">
-                              <Users className="h-3 w-3" />
-                              User {memberId.slice(-4)}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-
-                      {selectedProject.status !== 'pending' && (
-                        <div className="space-y-2 border-t pt-4">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Current Progress</span>
-                            <span className="font-bold">{selectedProject.progress}%</span>
+                      <ScrollArea className="max-h-[60vh]">
+                        {/* OVERVIEW TAB */}
+                        <TabsContent value="overview" className="space-y-6 pt-2">
+                          <div className="grid sm:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <Label className="text-muted-foreground">Problem Statement</Label>
+                              <p className="text-sm leading-relaxed break-words">{selectedProject.problemStatement || selectedProject.description}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-muted-foreground">The Solution/Idea</Label>
+                              <p className="text-sm leading-relaxed break-words">{selectedProject.idea || "No specific idea details provided yet."}</p>
+                            </div>
                           </div>
-                          <Progress value={selectedProject.progress} variant="accent" className="h-2" />
-                        </div>
-                      )}
-                    </>
+
+                          <div className="space-y-3 border-t pt-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-muted-foreground">Team ({selectedProject.team?.length || 0} / {selectedProject.memberLimit})</Label>
+                              {selectedProject.joinCode && (
+                                <Badge variant="secondary" className="font-mono">Code: {selectedProject.joinCode}</Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedProject.team?.map((member: any, i: number) => {
+                                const memberName = typeof member === 'string' ? `User ${member.slice(-4)}` : member.name;
+                                return (
+                                  <Badge key={i} variant="outline" className="flex items-center gap-1 py-1">
+                                    <Users className="h-3 w-3" />
+                                    {memberName}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {selectedProject.status !== 'pending' && (
+                            <div className="space-y-2 border-t pt-4">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">Progress</span>
+                                <span className="font-bold">{selectedProject.progress}%</span>
+                              </div>
+                              <Progress value={selectedProject.progress} variant="accent" className="h-2" />
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        {/* MANAGEMENT TAB */}
+                        <TabsContent value="management" className="space-y-6 pt-2">
+                          {isLeader(selectedProject) ? (
+                            <div className="space-y-6">
+                              {/* Progress Management */}
+                              <div className="space-y-4 p-4 rounded-lg bg-secondary/10 border">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-sm font-bold flex items-center gap-2">
+                                    <Target className="h-4 w-4" />
+                                    Project Progress ({tempProgress}%)
+                                  </Label>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => updateProgressMutation.mutate({ id: selectedProject.id || selectedProject._id, progress: tempProgress })}
+                                    disabled={updateProgressMutation.isPending || tempProgress === selectedProject.progress}
+                                  >
+                                    Save
+                                  </Button>
+                                </div>
+                                <Slider
+                                  value={[tempProgress]}
+                                  onValueChange={(val) => setTempProgress(val[0])}
+                                  max={100}
+                                  step={5}
+                                  className="py-4"
+                                />
+                                <p className="text-[10px] text-muted-foreground">Slide to update how much of the project is completed.</p>
+                              </div>
+
+                              {/* Goals Management */}
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <Label className="font-bold">Time Goals/Deadlines</Label>
+                                </div>
+
+                                <div className="grid gap-3">
+                                  {selectedProject.timeGoals?.map((goal: any, idx: number) => (
+                                    <div key={idx} className="flex items-start justify-between p-3 rounded-md bg-secondary/5 border text-sm">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                          {goal.status === 'completed' ? (
+                                            <CheckCircle className="h-3 w-3 text-green-500" />
+                                          ) : (
+                                            <Clock className="h-3 w-3 text-muted-foreground" />
+                                          )}
+                                          <span className={goal.status === 'completed' ? 'line-through text-muted-foreground' : 'font-medium'}>{goal.title}</span>
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground ml-5">
+                                          Due: {format(new Date(goal.deadline), 'MMM d, yyyy')}
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-1">
+                                        {goal.status !== 'completed' && (
+                                          <Button size="icon" variant="ghost" className="h-7 w-7 text-green-500" onClick={() => updateGoalMutation.mutate({ goalId: goal._id, status: 'completed' })}>
+                                            <CheckCircle className="h-4 w-4" />
+                                          </Button>
+                                        )}
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => deleteGoalMutation.mutate(goal._id)}>
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="p-4 rounded-lg border-2 border-dashed space-y-3">
+                                  <p className="text-xs font-medium">Add New Project Goal</p>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <Input
+                                      placeholder="Goal Title"
+                                      value={goalData.title}
+                                      onChange={(e) => setGoalData({ ...goalData, title: e.target.value })}
+                                      className="text-xs h-8"
+                                    />
+                                    <Input
+                                      type="date"
+                                      value={goalData.deadline}
+                                      onChange={(e) => setGoalData({ ...goalData, deadline: e.target.value })}
+                                      className="text-xs h-8"
+                                    />
+                                  </div>
+                                  <Select
+                                    value={goalData.assigneeId}
+                                    onValueChange={(val) => setGoalData({ ...goalData, assigneeId: val })}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue placeholder="Assign to Team Member (Optional)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {selectedProject.team?.map((member: any) => {
+                                        const mId = typeof member === 'string' ? member : member.id || member._id || member;
+                                        const mName = typeof member === 'string' ? `User ${member.slice(-4)}` : member.name;
+                                        return (
+                                          <SelectItem key={mId} value={mId}>
+                                            {mName}
+                                          </SelectItem>
+                                        );
+                                      })}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    className="w-full h-8 text-xs"
+                                    size="sm"
+                                    onClick={() => {
+                                      const assigneeId = goalData.assigneeId;
+                                      const assignee = selectedProject.team?.find((m: any) => (typeof m === 'string' ? m : m.id || m._id) === assigneeId);
+                                      const assigneeName = typeof assignee === 'string' ? `User ${assignee.slice(-4)}` : assignee?.name;
+                                      addGoalMutation.mutate({
+                                        ...goalData,
+                                        assigneeName: assigneeName || undefined
+                                      });
+                                    }}
+                                    disabled={!goalData.title || !goalData.deadline || addGoalMutation.isPending}
+                                  >
+                                    Add Goal
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <Label className="font-bold">Project Goals</Label>
+                              <div className="grid gap-4">
+                                {selectedProject.timeGoals?.length > 0 ? (
+                                  selectedProject.timeGoals.map((goal: any, idx: number) => {
+                                    const isAssignee = goal.assigneeId === user?.id;
+                                    const isPending = goal.status !== 'completed';
+
+                                    return (
+                                      <div key={idx} className="space-y-3 p-3 rounded-md bg-secondary/5 border text-sm">
+                                        <div className="flex items-start justify-between">
+                                          <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                              {goal.status === 'completed' ? (
+                                                <CheckCircle className="h-3 w-3 text-green-500" />
+                                              ) : (
+                                                <Clock className="h-3 w-3 text-muted-foreground" />
+                                              )}
+                                              <span className={goal.status === 'completed' ? 'line-through text-muted-foreground' : 'font-medium'}>{goal.title}</span>
+                                            </div>
+                                            <div className="text-[10px] text-muted-foreground ml-5 flex gap-3">
+                                              <span>Due: {format(new Date(goal.deadline), 'MMM d, yyyy')}</span>
+                                              {goal.assigneeName && <span className="text-primary font-medium">@{goal.assigneeName}</span>}
+                                            </div>
+                                          </div>
+                                          <Badge variant={goal.status === 'completed' ? 'success' : 'outline'} className="text-[10px] h-5 capitalize">
+                                            {goal.status}
+                                          </Badge>
+                                        </div>
+
+                                        {goal.submissionLink && (
+                                          <div className="ml-5 p-2 rounded bg-primary/5 text-[10px] border flex items-center justify-between">
+                                            <span className="truncate">Submited Link: <a href={goal.submissionLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{goal.submissionLink}</a></span>
+                                            {goal.completedAt && <span className="text-muted-foreground ml-2 whitespace-nowrap">{format(new Date(goal.completedAt), 'MMM d')}</span>}
+                                          </div>
+                                        )}
+
+                                        {isAssignee && isPending && (
+                                          <div className="ml-5 space-y-2 pt-2 border-t border-dashed">
+                                            {submittingGoalId === goal._id ? (
+                                              <div className="flex gap-1">
+                                                <Input
+                                                  placeholder="Paste submission link here..."
+                                                  className="h-7 text-[10px] flex-1"
+                                                  value={submissionLink}
+                                                  onChange={(e) => setSubmissionLink(e.target.value)}
+                                                />
+                                                <Button
+                                                  size="sm"
+                                                  className="h-7 text-[10px]"
+                                                  onClick={() => submitGoalMutation.mutate({ goalId: goal._id, link: submissionLink })}
+                                                  disabled={!submissionLink || submitGoalMutation.isPending}
+                                                >
+                                                  Submit
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-7 px-2"
+                                                  onClick={() => { setSubmittingGoalId(null); setSubmissionLink(''); }}
+                                                >
+                                                  Cancel
+                                                </Button>
+                                              </div>
+                                            ) : (
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="w-full h-7 text-[10px] border-primary/30 text-primary hover:bg-primary/5"
+                                                onClick={() => setSubmittingGoalId(goal._id)}
+                                              >
+                                                <Target className="h-3 w-3 mr-1" />
+                                                Add Submission Link
+                                              </Button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <p className="text-sm text-muted-foreground py-8 text-center italic">No goals set by leader yet.</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        {/* RESOURCES TAB */}
+                        <TabsContent value="resources" className="space-y-6 pt-2">
+                          <div className="space-y-4">
+                            <Label className="font-bold flex items-center gap-2">
+                              <LinkIcon className="h-4 w-4" />
+                              Project Resources & Links
+                            </Label>
+
+                            <div className="grid gap-3">
+                              {selectedProject.resources?.map((res: any, idx: number) => (
+                                <div key={idx} className="flex items-start justify-between p-3 rounded-md border text-sm group">
+                                  <div className="space-y-1">
+                                    <div className="font-medium flex items-center gap-2">
+                                      {res.title}
+                                      <a href={res.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">{res.description}</p>
+                                    <div className="text-[10px] text-muted-foreground italic">
+                                      Added by {res.addedByName} • {format(new Date(res.addedAt), 'MMM d')}
+                                    </div>
+                                  </div>
+                                  {(res.addedBy === user?.id || isLeader(selectedProject)) && (
+                                    <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => deleteResourceMutation.mutate(res._id)}>
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+
+                              {selectedProject.resources?.length === 0 && !addResourceMutation.isPending && (
+                                <p className="text-sm text-muted-foreground py-8 text-center italic">No links shared yet. Support the team by adding useful resources!</p>
+                              )}
+                            </div>
+
+                            <div className="p-4 rounded-lg border-2 border-dashed space-y-3 bg-primary/5">
+                              <p className="text-xs font-semibold">Share a Link</p>
+                              <div className="space-y-2">
+                                <Input
+                                  placeholder="Link Title (e.g. Design Doc, Repo)"
+                                  value={resourceData.title}
+                                  onChange={(e) => setResourceData({ ...resourceData, title: e.target.value })}
+                                  className="text-xs h-8"
+                                />
+                                <Input
+                                  placeholder="URL (https://...)"
+                                  value={resourceData.url}
+                                  onChange={(e) => setResourceData({ ...resourceData, url: e.target.value })}
+                                  className="text-xs h-8"
+                                />
+                                <Input
+                                  placeholder="Short Description"
+                                  value={resourceData.description}
+                                  onChange={(e) => setResourceData({ ...resourceData, description: e.target.value })}
+                                  className="text-xs h-8"
+                                />
+                              </div>
+                              <Button
+                                className="w-full h-8 text-xs"
+                                variant="gradient"
+                                onClick={() => addResourceMutation.mutate(resourceData)}
+                                disabled={!resourceData.title || !resourceData.url || addResourceMutation.isPending}
+                              >
+                                {addResourceMutation.isPending ? 'Adding...' : 'Add Link'}
+                              </Button>
+                            </div>
+                          </div>
+                        </TabsContent>
+                      </ScrollArea>
+                    </Tabs>
                   ) : (
                     <div className="py-12 text-center space-y-4 bg-secondary/20 rounded-xl border-2 border-dashed border-muted-foreground/20">
                       <Shield className="h-12 w-12 text-muted-foreground/30 mx-auto" />
@@ -438,19 +832,21 @@ export default function Projects() {
                         Exit Project
                       </Button>
 
-                      <Button
-                        variant="gradient"
-                        className="flex-1"
-                        onClick={() => completeProjectMutation.mutate(selectedProject.id || selectedProject._id)}
-                        disabled={completeProjectMutation.isPending}
-                      >
-                        {completeProjectMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                        )}
-                        Mark as Complete
-                      </Button>
+                      {isLeader(selectedProject) && (
+                        <Button
+                          variant="gradient"
+                          className="flex-1"
+                          onClick={() => completeProjectMutation.mutate(selectedProject.id || selectedProject._id)}
+                          disabled={completeProjectMutation.isPending}
+                        >
+                          {completeProjectMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Mark as Complete
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -539,13 +935,16 @@ export default function Projects() {
                     <div className="flex items-center justify-between pt-2 border-t border-border">
                       <div className="flex items-center gap-2">
                         <div className="flex -space-x-2">
-                          {project.team?.slice(0, 3).map((member: string, i: number) => (
-                            <Avatar key={i} className="h-6 w-6 border-2 border-card">
-                              <AvatarFallback className="text-xs bg-secondary">
-                                {String.fromCharCode(65 + i)}
-                              </AvatarFallback>
-                            </Avatar>
-                          ))}
+                          {project.team?.slice(0, 3).map((member: any, i: number) => {
+                            const name = typeof member === 'string' ? '?' : member.name;
+                            return (
+                              <Avatar key={i} className="h-6 w-6 border-2 border-card">
+                                <AvatarFallback className="text-[10px] bg-secondary">
+                                  {name.charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                            );
+                          })}
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {project.team?.length || 0} / {project.memberLimit} members

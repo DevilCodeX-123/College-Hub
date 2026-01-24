@@ -8,7 +8,9 @@ router.get('/', async (req, res) => {
         const { college } = req.query;
         let query = {};
         if (college) {
-            query.college = college;
+            const cleanCollege = college.trim();
+            const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
         }
         const notes = await Note.find(query).sort({ createdAt: -1 });
         res.json(notes);
@@ -24,7 +26,12 @@ router.get('/public', async (req, res) => {
         if (!college) {
             return res.status(400).json({ message: 'College name is required' });
         }
-        const notes = await Note.find({ college, isPublic: true }).sort({ createdAt: -1 });
+        const cleanCollege = college.trim();
+        const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const notes = await Note.find({
+            college: { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') },
+            isPublic: true
+        }).sort({ createdAt: -1 });
         res.json(notes);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -40,7 +47,7 @@ router.post('/', async (req, res) => {
             link,
             description,
             isPublic,
-            college,
+            college: college ? college.trim() : null,
             uploadedBy: userId
         });
         const newNote = await note.save();

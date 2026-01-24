@@ -16,8 +16,11 @@ router.get('/', async (req, res) => {
         if (requestingUserId) {
             const requester = await User.findById(requestingUserId);
             if (!requester) return res.status(404).json({ message: 'Requester not found' });
-            // Note: Tasks are primarily filtered by joinedClubs and targetType below.
-            // Here we just ensure requestingUserId is a valid user.
+
+            if (requester.role !== 'owner' && requester.college) {
+                const collegeName = requester.college.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
+            }
         }
 
         if (status) {
@@ -151,7 +154,17 @@ router.post('/submissions/:id/review', async (req, res) => {
 // CREATE a task (Award 20 points to club)
 router.post('/', async (req, res) => {
     try {
-        const taskData = req.body;
+        const taskData = { ...req.body };
+        if (taskData.college) taskData.college = taskData.college.trim();
+
+        // If college not provided but clubId exists, fetch college from club
+        if (!taskData.college && taskData.clubId) {
+            const club = await Club.findById(taskData.clubId);
+            if (club) {
+                taskData.college = club.college ? club.college.trim() : null;
+            }
+        }
+
         const task = new Task(taskData);
         await task.save();
 

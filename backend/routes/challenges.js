@@ -18,7 +18,10 @@ router.get('/', async (req, res) => {
             if (requester && requester.role !== 'owner') {
                 // Determine college for isolation
                 // If not owner, they can ONLY see challenges from their college
-                query.college = requester.college;
+                if (requester.college) {
+                    const collegeName = requester.college.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
+                }
             }
         }
 
@@ -26,8 +29,10 @@ router.get('/', async (req, res) => {
             query.clubId = clubId;
         } else if (college) {
             // Respect passed college but it's restricted by query.college above if not owner
-            if (!query.college || query.college === college) {
-                query.college = college;
+            if (!query.college) {
+                const cleanCollege = college.trim();
+                const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
             }
         }
 
@@ -42,8 +47,18 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const joinCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+
+        // Fetch club to get college
+        let college = req.body.college;
+        if (req.body.clubId && !college) {
+            const club = await Club.findById(req.body.clubId);
+            if (club) {
+                college = club.college;
+            }
+        }
+
         // phases should be passed in req.body
-        const challengeData = { ...req.body, joinCode };
+        const challengeData = { ...req.body, joinCode, college };
         const challenge = new Challenge(challengeData);
         const newChallenge = await challenge.save();
 
@@ -51,7 +66,6 @@ router.post('/', async (req, res) => {
         if (req.body.clubId) {
             const club = await Club.findById(req.body.clubId);
             if (club) {
-                club.coins = (club.coins || 0) + 100;
                 club.points = (club.points || 0) + 50;
                 club.monthlyPoints = (club.monthlyPoints || 0) + 50;
                 await club.save();
@@ -94,11 +108,10 @@ router.post('/join-by-code', async (req, res) => {
         challenge.participants += 1;
         await challenge.save();
 
-        // Award 2 coins to the club for participation
+        // Club Points can be awarded here if needed in future
         if (challenge.clubId) {
             const club = await Club.findById(challenge.clubId);
             if (club) {
-                club.coins = (club.coins || 0) + 2;
                 await club.save();
             }
         }
@@ -147,15 +160,6 @@ router.post('/:id/join', async (req, res) => {
         // Increment participants
         challenge.participants += 1;
         await challenge.save();
-
-        // Award 2 coins to the club
-        if (challenge.clubId) {
-            const club = await Club.findById(challenge.clubId);
-            if (club) {
-                club.coins = (club.coins || 0) + 2;
-                await club.save();
-            }
-        }
 
         // Add to user activity
         user.activity.push({

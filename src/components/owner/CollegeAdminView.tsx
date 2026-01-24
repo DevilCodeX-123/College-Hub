@@ -329,17 +329,16 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                     </Card>
                 </TabsContent>
 
-                {/* Clubs Tab */}
                 <TabsContent value="clubs" className="space-y-6">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
+                        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <CardTitle>Club Management</CardTitle>
-                            <div className="flex gap-2">
-                                <Button variant="outline" onClick={() => setIsCollegeTasksOpen(true)}>
+                            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                                <Button variant="outline" onClick={() => setIsCollegeTasksOpen(true)} className="flex-1 sm:flex-none h-9 text-xs">
                                     <ClipboardList className="h-4 w-4 mr-2" />
                                     College Tasks
                                 </Button>
-                                <Button onClick={() => setIsCreateClubOpen(true)}>
+                                <Button onClick={() => setIsCreateClubOpen(true)} className="flex-1 sm:flex-none h-9 text-xs">
                                     <Building2 className="h-4 w-4 mr-2" />
                                     Create Club
                                 </Button>
@@ -417,27 +416,27 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                 <TabsContent value="polls" className="space-y-6">
                     <div className="grid md:grid-cols-1 gap-6">
                         <Card>
-                            <CardHeader className="flex flex-row items-center justify-between">
+                            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                 <div>
                                     <CardTitle>College-wide Polls</CardTitle>
                                     <p className="text-sm text-muted-foreground mt-1">Feedback from all students in {collegeName}</p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="bg-secondary p-1 rounded-lg flex text-xs font-semibold">
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                                    <div className="bg-secondary p-1 rounded-lg flex text-xs font-semibold w-full sm:w-auto">
                                         <button
-                                            className={`px-3 py-1 rounded-md transition-all ${pollFilter === 'active' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md transition-all ${pollFilter === 'active' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                                             onClick={() => setPollFilter('active')}
                                         >
                                             Active
                                         </button>
                                         <button
-                                            className={`px-3 py-1 rounded-md transition-all ${pollFilter === 'closed' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md transition-all ${pollFilter === 'closed' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                                             onClick={() => setPollFilter('closed')}
                                         >
                                             History
                                         </button>
                                     </div>
-                                    <Button onClick={() => setIsCreatePollOpen(true)}>
+                                    <Button onClick={() => setIsCreatePollOpen(true)} className="h-10 sm:h-9 text-xs sm:text-sm">
                                         <Plus className="h-4 w-4 mr-2" /> New Poll
                                     </Button>
                                 </div>
@@ -452,12 +451,12 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                 {/* Notifications Tab */}
                 <TabsContent value="notifications" className="space-y-6">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
+                        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div>
                                 <CardTitle>Broadcast Notifications</CardTitle>
                                 <p className="text-sm text-muted-foreground mt-1">Send alerts and updates to all students</p>
                             </div>
-                            <Button onClick={() => setIsCreateBroadcastOpen(true)}>
+                            <Button onClick={() => setIsCreateBroadcastOpen(true)} className="w-full sm:w-auto h-10 sm:h-9 text-xs sm:text-sm">
                                 <FileText className="h-4 w-4 mr-2" />
                                 Send Broadcast
                             </Button>
@@ -481,12 +480,12 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                 {/* Notes Tab */}
                 <TabsContent value="notes" className="space-y-6">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
+                        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div>
                                 <CardTitle>Notes & Papers Management</CardTitle>
                                 <p className="text-sm text-muted-foreground mt-1">Share study materials and papers with students</p>
                             </div>
-                            <Button onClick={() => setIsCreateNoteOpen(true)}>
+                            <Button onClick={() => setIsCreateNoteOpen(true)} className="w-full sm:w-auto h-10 sm:h-9 text-xs sm:text-sm">
                                 <Plus className="h-4 w-4 mr-2" />
                                 Add Note / Paper
                             </Button>
@@ -500,12 +499,12 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                 {/* Smart Campus Tab */}
                 <TabsContent value="locations" className="space-y-6">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
+                        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div>
                                 <CardTitle>Smart Campus Management</CardTitle>
                                 <p className="text-sm text-muted-foreground mt-1">Manage campus locations and navigation links</p>
                             </div>
-                            <Button onClick={() => setIsCreateLocationOpen(true)}>
+                            <Button onClick={() => setIsCreateLocationOpen(true)} className="w-full sm:w-auto h-10 sm:h-9 text-xs sm:text-sm">
                                 <Plus className="h-4 w-4 mr-2" />
                                 Add Location
                             </Button>

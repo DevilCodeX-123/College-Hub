@@ -9,6 +9,7 @@ const taskSchema = new mongoose.Schema({
     clubName: String,
     targetType: { type: String, enum: ['all', 'club', 'specific'], default: 'all' },
     targetEmails: [String],
+    college: String,
     createdBy: String,
     isPermanent: { type: Boolean, default: false },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' }

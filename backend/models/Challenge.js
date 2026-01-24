@@ -5,6 +5,7 @@ const challengeSchema = new mongoose.Schema({
     description: String,
     clubId: { type: String, required: true },
     clubName: String,
+    college: String,
     points: { type: Number, default: 200 }, // Awarded on completion
     entryFee: { type: Number, default: 100 }, // Required to join
     difficulty: {

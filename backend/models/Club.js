@@ -10,7 +10,6 @@ const clubSchema = new mongoose.Schema({
     memberCount: { type: Number, default: 0 },
     points: { type: Number, default: 0 }, // Accumulated points for ranking
     monthlyPoints: { type: Number, default: 0 }, // Monthly points for ranking
-    coins: { type: Number, default: 0 }, // Spendable currency
     category: String,
     coordinator: String,
     coordinatorId: String, // Link to User ID

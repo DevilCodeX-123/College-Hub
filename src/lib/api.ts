@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Club, Challenge, Project, User } from '@/types';
 
-const API_URL = '/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Add auth header to requests
 const getAuthDetails = () => {
@@ -197,6 +197,34 @@ export const api = {
     },
     deleteProject: async (projectId: string) => {
         const response = await axios.delete(`${API_URL}/projects/${projectId}`, getAuthDetails());
+        return response.data;
+    },
+    updateProjectProgress: async (id: string, progress: number, requestingUserId: string) => {
+        const response = await axios.patch(`${API_URL}/projects/${id}/progress`, { progress, requestingUserId }, getAuthDetails());
+        return response.data;
+    },
+    addProjectGoal: async (id: string, goalData: { title: string, deadline: string, assigneeId?: string, assigneeName?: string, requestingUserId: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/goals`, goalData, getAuthDetails());
+        return response.data;
+    },
+    submitProjectGoal: async (id: string, goalId: string, submissionLink: string, requestingUserId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/goals/${goalId}/submit`, { submissionLink, requestingUserId }, getAuthDetails());
+        return response.data;
+    },
+    updateProjectGoal: async (id: string, goalId: string, status: string, requestingUserId: string) => {
+        const response = await axios.patch(`${API_URL}/projects/${id}/goals/${goalId}`, { status, requestingUserId }, getAuthDetails());
+        return response.data;
+    },
+    deleteProjectGoal: async (id: string, goalId: string, requestingUserId: string) => {
+        const response = await axios.delete(`${API_URL}/projects/${id}/goals/${goalId}`, { params: { requestingUserId }, ...getAuthDetails() });
+        return response.data;
+    },
+    addProjectResource: async (id: string, resourceData: { title: string, description?: string, url: string, addedBy: string, addedByName: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/resources`, resourceData, getAuthDetails());
+        return response.data;
+    },
+    deleteProjectResource: async (id: string, resourceId: string, requestingUserId: string) => {
+        const response = await axios.delete(`${API_URL}/projects/${id}/resources/${resourceId}`, { params: { requestingUserId }, ...getAuthDetails() });
         return response.data;
     },
 

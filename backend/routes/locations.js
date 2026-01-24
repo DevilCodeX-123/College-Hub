@@ -8,7 +8,9 @@ router.get('/', async (req, res) => {
         const { college } = req.query;
         let query = {};
         if (college) {
-            query.college = college;
+            const cleanCollege = college.trim();
+            const collegeName = cleanCollege.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
         }
         const locations = await CampusLocation.find(query).sort({ createdAt: -1 });
         res.json(locations);
@@ -24,7 +26,7 @@ router.post('/', async (req, res) => {
         const location = new CampusLocation({
             name,
             googleMapsLink,
-            college,
+            college: college ? college.trim() : null,
             category: category || 'General',
             description: description || '',
             uploadedBy: userId
