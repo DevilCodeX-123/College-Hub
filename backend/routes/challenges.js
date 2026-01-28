@@ -35,9 +35,19 @@ router.get('/', async (req, res) => {
                 query.college = { $regex: new RegExp(`^\\s*${collegeName}\\s*$`, 'i') };
             }
         }
-
         const challenges = await Challenge.find(query).sort({ createdAt: -1 });
         res.json(challenges);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// GET a single challenge
+router.get('/:id', async (req, res) => {
+    try {
+        const challenge = await Challenge.findById(req.params.id);
+        if (!challenge) return res.status(404).json({ message: 'Challenge not found' });
+        res.json(challenge);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -46,6 +56,16 @@ router.get('/', async (req, res) => {
 // CREATE a challenge
 router.post('/', async (req, res) => {
     try {
+        // Future Date Enforcement
+        if (req.body.deadline) {
+            const deadlineDate = new Date(req.body.deadline);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (deadlineDate < today) {
+                return res.status(400).json({ message: 'Challenge deadline cannot be in the past' });
+            }
+        }
+
         const joinCode = crypto.randomBytes(3).toString('hex').toUpperCase();
 
         // Fetch club to get college
@@ -57,20 +77,20 @@ router.post('/', async (req, res) => {
             }
         }
 
+        // Calculate XP and Club Points
+        const phaseCount = req.body.phases?.length || 0;
+        const studentXP = 100 + (phaseCount > 1 ? (phaseCount - 1) * 50 : 0);
         // phases should be passed in req.body
-        const challengeData = { ...req.body, joinCode, college };
+        const challengeData = {
+            ...req.body,
+            joinCode,
+            college,
+            points: studentXP // Enforce calculated XP
+        };
         const challenge = new Challenge(challengeData);
         const newChallenge = await challenge.save();
 
-        // Award 100 coins to the club
-        if (req.body.clubId) {
-            const club = await Club.findById(req.body.clubId);
-            if (club) {
-                club.points = (club.points || 0) + 50;
-                club.monthlyPoints = (club.monthlyPoints || 0) + 50;
-                await club.save();
-            }
-        }
+        // REWARD DELAYED: Club coordination points moved to completion
 
         res.status(201).json(newChallenge);
     } catch (err) {
@@ -107,14 +127,6 @@ router.post('/join-by-code', async (req, res) => {
 
         challenge.participants += 1;
         await challenge.save();
-
-        // Club Points can be awarded here if needed in future
-        if (challenge.clubId) {
-            const club = await Club.findById(challenge.clubId);
-            if (club) {
-                await club.save();
-            }
-        }
 
         user.activity.push({
             type: 'challenge',
@@ -237,6 +249,14 @@ router.post('/verify-completion', async (req, res) => {
         user.weeklyXP += xpEarned;
         user.level = calculateLevelFromXP(user.totalEarnedXP);
 
+        user.pointsHistory.push({
+            amount: xpEarned,
+            reason: `Verified completion of challenge: ${challenge.title}`,
+            sourceId: challenge._id,
+            sourceType: 'challenge',
+            timestamp: new Date()
+        });
+
         await user.save();
 
         res.json({ message: `Challenge verified! ${xpEarned} XP awarded to ${user.name}.`, user });
@@ -254,6 +274,32 @@ router.get('/my-team/:challengeId', async (req, res) => {
             members: userId
         }).populate('members', 'name avatar email');
         res.json(team);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// GET user's team for a challenge (alternate route pattern)
+router.get('/:challengeId/team/:userId', async (req, res) => {
+    try {
+        const { challengeId, userId } = req.params;
+        const team = await ChallengeTeam.findOne({
+            challengeId: challengeId,
+            members: userId
+        }).populate('members', 'name avatar email');
+        res.json(team);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// GET all teams for a challenge
+router.get('/:challengeId/teams', async (req, res) => {
+    try {
+        const teams = await ChallengeTeam.find({
+            challengeId: req.params.challengeId
+        }).populate('members', 'name avatar email').populate('leaderId', 'name');
+        res.json(teams);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -299,6 +345,16 @@ router.post('/:id/create-team', async (req, res) => {
         });
 
         await team.save();
+
+        // Award Club points for new team unit (25 pts = 20 bonus + 5 unit)
+        if (challenge.clubId) {
+            const club = await Club.findById(challenge.clubId);
+            if (club) {
+                club.points += 25;
+                club.monthlyPoints += 25;
+                await club.save();
+            }
+        }
 
         // Update user activity if not already joined challenge (or update status)
         const activityIndex = user.activity.findIndex(a => a.refId === challengeId);
@@ -416,6 +472,53 @@ router.post('/remove-team-member', async (req, res) => {
     }
 });
 
+// EXIT team (member leaves voluntarily)
+router.post('/exit-team', async (req, res) => {
+    try {
+        const { teamId, userId } = req.body;
+        const team = await ChallengeTeam.findById(teamId);
+
+        if (!team) return res.status(404).json({ message: 'Team not found' });
+
+        // Check if user is in the team
+        if (!team.members.includes(userId)) {
+            return res.status(400).json({ message: 'You are not in this team' });
+        }
+
+        // Check if user is leader
+        const isLeader = team.leaderId.toString() === userId;
+
+        // Remove member from team
+        team.members = team.members.filter(m => m.toString() !== userId);
+
+        // If user was leader and there are remaining members, assign new leader
+        if (isLeader && team.members.length > 0) {
+            // The next member in the list becomes the leader
+            team.leaderId = team.members[0];
+        }
+
+        // If team is now empty, delete it
+        if (team.members.length === 0) {
+            await ChallengeTeam.findByIdAndDelete(teamId);
+        } else {
+            await team.save();
+        }
+
+        // Remove challenge from user's activity
+        const user = await User.findById(userId);
+        if (user) {
+            user.activity = user.activity.filter(a =>
+                !(a.type === 'challenge' && a.refId.toString() === team.challengeId.toString())
+            );
+            await user.save();
+        }
+
+        res.json({ message: 'Successfully left the team', user });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // SUBMIT challenge work
 router.post('/:id/submit', async (req, res) => {
     try {
@@ -438,18 +541,55 @@ router.post('/:id/submit', async (req, res) => {
             return res.status(400).json({ message: 'You must join the challenge first' });
         }
 
+        // Team Challenge Validation
+        if (challenge.isTeamChallenge) {
+            // Find user's team
+            const team = await ChallengeTeam.findOne({
+                challengeId,
+                members: userId
+            });
+
+            if (!team) {
+                return res.status(400).json({ message: 'You must be in a team to submit this challenge' });
+            }
+
+            // Check if user is the team leader
+            if (team.leaderId.toString() !== userId) {
+                return res.status(403).json({ message: 'Only the team leader can submit work for this challenge' });
+            }
+
+            // Validate team size
+            const teamSize = team.members.length;
+            const minSize = challenge.minTeamSize || 2;
+            const maxSize = challenge.maxTeamSize || 4;
+
+            if (teamSize < minSize || teamSize > maxSize) {
+                return res.status(400).json({
+                    message: `Team size must be between ${minSize} and ${maxSize} members. Current size: ${teamSize}`
+                });
+            }
+        }
+
         // Validate Phase Deadline
         if (phaseId && challenge.phases && challenge.phases.length > 0) {
             const phase = challenge.phases.id(phaseId);
             if (!phase) return res.status(404).json({ message: 'Phase not found' });
 
-            if (phase.deadline && new Date() > new Date(phase.deadline)) {
-                return res.status(400).json({ message: `Deadline for ${phase.name} has passed.` });
+            if (phase.deadline) {
+                const deadlineDate = new Date(phase.deadline);
+                deadlineDate.setHours(23, 59, 59, 999);
+                if (new Date() > deadlineDate) {
+                    return res.status(400).json({ message: `Deadline for ${phase.name} has passed.` });
+                }
             }
         }
         // Fallback main deadline check for non-phase challenges
-        else if (challenge.deadline && new Date() > new Date(challenge.deadline)) {
-            return res.status(400).json({ message: 'Challenge deadline has passed.' });
+        else if (challenge.deadline) {
+            const deadlineDate = new Date(challenge.deadline);
+            deadlineDate.setHours(23, 59, 59, 999);
+            if (new Date() > deadlineDate) {
+                return res.status(400).json({ message: 'Challenge deadline has passed.' });
+            }
         }
 
         // Check if already submitted (for this phase if phased)
@@ -533,46 +673,13 @@ router.post('/:id/grade/:submissionId', async (req, res) => {
 
         await challenge.save();
 
-        // Calculate XP based on marks
-        const xpEarned = Math.round((marks / 100) * challenge.points);
-
-        // Award XP if passed
-        if (marks >= 40) {
-            student.points += xpEarned;
-            student.totalEarnedXP += xpEarned;
-            student.weeklyXP += xpEarned;
-            student.level = calculateLevelFromXP(student.totalEarnedXP);
-
-            // Update activity status to completed
-            const activity = student.activity.find(a =>
-                a.type === 'challenge' && a.refId && a.refId.toString() === challengeId
-            );
-            if (activity) {
-                activity.status = 'completed';
-            }
-
-            // Award Badge if provided
-            if (awardBadge) {
-                student.badges.push({
-                    name: awardBadge.name,
-                    icon: awardBadge.icon || 'award',
-                    description: awardBadge.description || `Awarded for ${challenge.title}`,
-                    earnedAt: new Date()
-                });
-            }
-
-            // Award Skill if provided
-            if (awardSkill && !student.skills.includes(awardSkill)) {
-                student.skills.push(awardSkill);
-            }
-        }
-
-        await student.save();
+        // REWARD DELAYED: Rewards moved to challenge completion block
 
         // Create notification for student
         const Notification = require('../models/Notification');
+        const xpEarned = Math.round((marks / 100) * challenge.points);
         let notifMessage = marks >= 40
-            ? `Your submission for "${challenge.title}" has been approved! You earned ${xpEarned} XP. Marks: ${marks}/100${feedback ? `. Feedback: ${feedback}` : ''}`
+            ? `Your submission for "${challenge.title}" has been approved! You will receive ${xpEarned} XP once the challenge is officially completed. Marks: ${marks}/100${feedback ? `. Feedback: ${feedback}` : ''}`
             : `Your submission for "${challenge.title}" needs improvement. Marks: ${marks}/100${feedback ? `. Feedback: ${feedback}` : ''}`;
 
         if (awardBadge) notifMessage += ` You also earned the "${awardBadge.name}" badge!`;
@@ -581,17 +688,17 @@ router.post('/:id/grade/:submissionId', async (req, res) => {
         await Notification.create({
             recipient: userId,
             sender: reviewerId,
-            title: marks >= 40 ? 'Challenge Approved!' : 'Challenge Needs Improvement',
+            title: marks >= 40 ? 'Challenge Approved (Points Pending)!' : 'Challenge Needs Improvement',
             message: notifMessage,
             type: marks >= 40 ? 'success' : 'warning'
         });
 
         res.json({
             message: marks >= 40
-                ? `Submission approved! ${xpEarned} XP awarded to ${student.name}.`
+                ? `Submission approved! XP will be awarded when the challenge ends.`
                 : `Submission marked. Student notified.`,
             student,
-            xpEarned: marks >= 40 ? xpEarned : 0
+            xpEarned: 0 // Delayed
         });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -610,24 +717,117 @@ router.put('/:id', async (req, res) => {
             return res.status(404).json({ message: 'Challenge not found' });
         }
 
+        // Enforce point rules on update
+        if (updates.phases) {
+            const phaseCount = updates.phases.length || 0;
+            updates.points = 100 + (phaseCount > 1 ? (phaseCount - 1) * 50 : 0);
+        }
+
         const challenge = await Challenge.findByIdAndUpdate(
             challengeId,
             updates,
             { new: true, runValidators: true }
         );
 
-        // If status changed to 'completed', add to club history
+        // If status changed to 'completed', award points/XP to all approved students and the club
         if (updates.status === 'completed' && oldChallenge.status !== 'completed') {
             const club = await Club.findById(challenge.clubId);
+            const approvedSubmissions = challenge.submissions.filter(sub => sub.status === 'approved');
+
+            // 1. Award Club points
             if (club) {
+                // Coordination (50) + Grading (50 per student)
+                const coordinationPoints = 50;
+                const gradingPoints = approvedSubmissions.length * 50;
+                const totalClubPoints = coordinationPoints + gradingPoints;
+
+                club.points = (club.points || 0) + totalClubPoints;
+                club.monthlyPoints = (club.monthlyPoints || 0) + totalClubPoints;
+
+                club.pointsHistory.push({
+                    amount: totalClubPoints,
+                    reason: `Coordination and grading points for challenge: ${challenge.title}`,
+                    sourceId: challenge._id,
+                    sourceType: 'challenge',
+                    timestamp: new Date()
+                });
+
+                await club.save();
+            }
+
+            // 2. Award Students their XP
+            for (let sub of approvedSubmissions) {
+                const student = await User.findById(sub.userId);
+                if (student) {
+                    const xpEarned = Math.round((sub.marks / 100) * challenge.points);
+                    student.points = (student.points || 0) + xpEarned;
+                    student.totalEarnedXP = (student.totalEarnedXP || 0) + xpEarned;
+                    student.weeklyXP = (student.weeklyXP || 0) + xpEarned;
+                    student.level = calculateLevelFromXP(student.totalEarnedXP);
+
+                    student.pointsHistory.push({
+                        amount: xpEarned,
+                        reason: `Finished challenge with ${sub.marks}/100 marks: ${challenge.title}`,
+                        sourceId: challenge._id,
+                        sourceType: 'challenge',
+                        timestamp: new Date()
+                    });
+
+                    await student.save();
+                }
+            }
+
+            if (club) {
+                // Construct high-detail leaderboard for archival
+                const sortedSubs = [...approvedSubmissions].sort((a, b) => (b.marks || 0) - (a.marks || 0));
+
+                const leaderboard = await Promise.all(sortedSubs.map(async (sub, index) => {
+                    const student = await User.findById(sub.userId).select('avatar');
+                    return {
+                        userId: sub.userId,
+                        name: sub.userName,
+                        avatar: student?.avatar || '',
+                        rank: index + 1,
+                        score: sub.marks || 0,
+                        submissionLink: sub.submissionLink
+                    };
+                }));
+
                 club.history.push({
                     type: 'challenge',
+                    id: challenge._id,
+                    challengeId: challenge._id.toString(), // Link to original Challenge ID
                     title: challenge.title,
                     date: new Date(),
                     description: challenge.description || 'Completed challenge.',
-                    link: `/challenges` // Link to challenges page or specific challenge if exists
+                    category: challenge.category || 'Challenge',
+                    points: challenge.points || 0,
+                    participantCount: challenge.participants || approvedSubmissions.length,
+                    leaderboard: leaderboard,
+                    link: `/challenges`
                 });
                 await club.save();
+
+                // Create a Rating Poll for the challenge
+                const Poll = require('../models/Poll');
+                const ratingPoll = new Poll({
+                    question: `How would you rate the challenge: ${challenge.title}?`,
+                    options: [
+                        { text: '1 Star ⭐', votes: 0 },
+                        { text: '2 Stars ⭐⭐', votes: 0 },
+                        { text: '3 Stars ⭐⭐⭐', votes: 0 },
+                        { text: '4 Stars ⭐⭐⭐⭐', votes: 0 },
+                        { text: '5 Stars ⭐⭐⭐⭐⭐', votes: 0 }
+                    ],
+                    createdBy: challenge.instructorId || club.coordinatorId,
+                    targetRoles: ['all'],
+                    college: club.college || null,
+                    clubId: challenge.clubId,
+                    challengeId: challenge._id,
+                    isRatingPoll: true,
+                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
+                });
+                await ratingPoll.save();
             }
         }
 
@@ -640,11 +840,65 @@ router.put('/:id', async (req, res) => {
 // DELETE challenge
 router.delete('/:id', async (req, res) => {
     try {
-        const challenge = await Challenge.findByIdAndDelete(req.params.id);
+        const challenge = await Challenge.findById(req.params.id);
         if (!challenge) {
             return res.status(404).json({ message: 'Challenge not found' });
         }
-        res.json({ message: 'Challenge deleted successfully' });
+
+        // REMOVE POINTS ON DELETION
+        // 1. Remove Club points
+        const club = await Club.findById(challenge.clubId);
+        if (club) {
+            let totalToDeduct = 0;
+
+            // Deduction only happens if the challenge was completed (rewards were issued)
+            if (challenge.status === 'completed') {
+                const approvedCount = challenge.submissions.filter(s => s.status === 'approved').length;
+                totalToDeduct = 50 + (approvedCount * 50); // Coordination (50) + Grading (50/std)
+            }
+
+            if (totalToDeduct > 0) {
+                club.points = Math.max(0, (club.points || 0) - totalToDeduct);
+                club.monthlyPoints = Math.max(0, (club.monthlyPoints || 0) - totalToDeduct);
+                await club.save();
+            }
+        }
+
+        // 2. Remove Student XP if completed
+        if (challenge.status === 'completed') {
+            for (let sub of challenge.submissions) {
+                if (sub.status === 'approved') {
+                    const student = await User.findById(sub.userId);
+                    if (student) {
+                        const xpToDeduct = Math.round((sub.marks / 100) * challenge.points);
+                        student.points = Math.max(0, (student.points || 0) - xpToDeduct);
+                        student.totalEarnedXP = Math.max(0, (student.totalEarnedXP || 0) - xpToDeduct);
+                        student.weeklyXP = Math.max(0, (student.weeklyXP || 0) - xpToDeduct);
+                        student.level = calculateLevelFromXP(student.totalEarnedXP);
+                        await student.save();
+                    }
+                }
+            }
+
+            // ❌ 3. Revoke Rating Poll Points from Club
+            const Poll = require('../models/Poll');
+            const poll = await Poll.findOne({ challengeId: req.params.id, isRatingPoll: true });
+            if (poll && club) {
+                let totalPollPts = 0;
+                poll.options.forEach(opt => {
+                    const stars = parseInt(opt.text.match(/(\d+)/)?.[1] || 0);
+                    totalPollPts += (stars * (opt.votes || 0));
+                });
+                if (totalPollPts > 0) {
+                    club.points = Math.max(0, club.points - totalPollPts);
+                    club.monthlyPoints = Math.max(0, club.monthlyPoints - totalPollPts);
+                    await club.save();
+                }
+            }
+        }
+
+        await Challenge.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Challenge deleted successfully. Associated points and voter rewards have been revoked.' });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

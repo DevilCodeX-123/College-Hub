@@ -9,15 +9,16 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { Club } from '@/types';
 
-const categories = ['All', 'Technology', 'Technical', 'Business', 'Creative', 'Cultural', 'Literary', 'Sports', 'Social', 'Others'];
+const categories = ['All', 'Technology', 'Business', 'Creative', 'Cultural', 'Literary', 'Sports', 'Social', 'Others'];
 
 export default function Clubs() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
-  const { data: clubs = [], isLoading } = useQuery({
+  const { data: clubs = [], isLoading } = useQuery<Club[]>({
     queryKey: ['clubs', user?.college],
     queryFn: () => api.getClubs(user?.college, user?.id || user?._id),
   });

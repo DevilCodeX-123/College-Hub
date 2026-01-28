@@ -34,7 +34,20 @@ const clubSchema = new mongoose.Schema({
         title: String,
         description: String,
         icon: String,
-        earnedAt: Date
+        earnedAt: Date,
+        // Detailed Fields
+        organizingClub: String,
+        collaboratingClubs: [String],
+        chiefGuests: [{
+            name: String,
+            designation: String
+        }],
+        competitions: [String],
+        winners: [{
+            name: String,
+            position: String,
+            prize: String
+        }]
     }],
     joiningDeadline: Date,
     history: [{
@@ -44,6 +57,7 @@ const clubSchema = new mongoose.Schema({
         description: String,
         link: String,
         coverImage: String,
+        challengeId: String, // Link to original Challenge ID
         // Detailed Fields
         organizingClub: String,
         collaboratingClubs: [String],
@@ -57,6 +71,18 @@ const clubSchema = new mongoose.Schema({
             name: String,
             position: String,
             prize: String
+        }],
+        // Challenge Specifics
+        category: String,
+        points: Number,
+        leaderboard: [{
+            userId: String,
+            name: String,
+            avatar: String,
+            rank: Number,
+            score: Number,
+            submissionLink: String,
+            feedback: String
         }],
         location: String,
         duration: String, // e.g., "10:00 AM - 4:00 PM"
@@ -78,6 +104,13 @@ const clubSchema = new mongoose.Schema({
         },
         suggestedAt: { type: Date, default: Date.now },
         status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' }
+    }],
+    pointsHistory: [{
+        amount: Number,
+        reason: String,
+        timestamp: { type: Date, default: Date.now },
+        sourceId: String,
+        sourceType: { type: String, enum: ['challenge', 'project', 'event', 'bonus'] }
     }]
 }, { timestamps: true });
 

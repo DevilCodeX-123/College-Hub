@@ -57,9 +57,9 @@ router.post('/register', async (req, res) => {
 // Login
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
-
+    const normalizedEmail = email?.trim().toLowerCase();
     try {
-        let user = await User.findOne({ email });
+        let user = await User.findOne({ email: normalizedEmail });
         if (!user) {
             return res.status(400).json({ message: 'Invalid Credentials' });
         }
@@ -90,6 +90,14 @@ router.post('/login', async (req, res) => {
             user.weeklyXP = (user.weeklyXP || 0) + 20;
             user.level = calculateLevelFromXP(user.totalEarnedXP);
             user.lastLoginDate = new Date();
+
+            user.pointsHistory.push({
+                amount: 20,
+                reason: 'Daily Login Reward',
+                sourceType: 'bonus',
+                timestamp: new Date()
+            });
+
             await user.save();
         }
 

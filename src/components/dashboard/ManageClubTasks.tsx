@@ -42,34 +42,59 @@ import {
     DialogFooter
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from '@/lib/utils';
 
-export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId?: string, clubName?: string, readOnly?: boolean }) {
+export function ManageClubTasks({
+    clubId,
+    clubName,
+    readOnly = false,
+    categoryFilter = 'all'
+}: {
+    clubId?: string,
+    clubName?: string,
+    readOnly?: boolean,
+    categoryFilter?: 'operational' | 'global' | 'all'
+}) {
     const { user } = useAuth();
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [selectedTaskDetails, setSelectedTaskDetails] = useState<any>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [pointsInput, setPointsInput] = useState<Record<string, number>>({});
+    const [isManageAssigneesOpen, setIsManageAssigneesOpen] = useState(false);
+    const [editingAssignees, setEditingAssignees] = useState<string[]>([]);
+
+    // Fetch members for assignee management
+    const { data: allUsers = [] } = useQuery<any[]>({
+        queryKey: ['users'],
+        queryFn: () => api.getUsers(),
+        enabled: categoryFilter === 'operational'
+    });
+    const clubMembers = allUsers.filter((u: any) => u.joinedClubs?.includes(clubId));
 
     const [newTask, setNewTask] = useState({
         title: '',
         description: '',
-        pointsReward: 50,
+        pointsReward: 25,
         targetType: 'club',
         targetEmails: '',
-        category: 'daily'
+        category: 'daily',
+        deadline: '',
+        isMandatory: true
     });
 
     // Fetch Active Tasks
-    const { data: activeTasks = [], isLoading: isLoadingTasks } = useQuery({
+    const { data: activeTasksArray = [], isLoading: isLoadingTasks } = useQuery({
         queryKey: ['club-tasks', clubId || 'global', 'active'],
-        queryFn: () => api.getTasks(clubId ? { joinedClubs: clubId, status: 'active' } : { status: 'active' })
+        queryFn: () => api.getTasks(clubId ? { clubId, status: 'active' } : { status: 'active' })
     });
 
     // Fetch History Tasks
-    const { data: historyTasks = [], isLoading: isLoadingHistory } = useQuery({
+    const { data: historyTasksArray = [], isLoading: isLoadingHistory } = useQuery({
         queryKey: ['club-tasks', clubId || 'global', 'history'],
-        queryFn: () => api.getTasks(clubId ? { joinedClubs: clubId, status: 'inactive' } : { status: 'inactive' })
+        queryFn: () => api.getTasks(clubId ? { clubId, status: 'inactive' } : { status: 'inactive' })
     });
 
     // Fetch Submissions
@@ -89,9 +114,9 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['club-tasks'] });
             queryClient.invalidateQueries({ queryKey: ['my-club'] });
-            toast({ title: "Task Created!", description: "Club received +20 points for adding a task." });
+            toast({ title: "Task Deployed!", description: "Task is now live for members." });
             setIsCreateOpen(false);
-            setNewTask({ title: '', description: '', pointsReward: 50, targetType: 'club', targetEmails: '', category: 'daily' });
+            setNewTask({ title: '', description: '', pointsReward: 25, targetType: 'club', targetEmails: '', category: 'daily', deadline: '', isMandatory: true });
         }
     });
 
@@ -109,34 +134,348 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
             queryClient.invalidateQueries({ queryKey: ['club-task-submissions', clubId] });
             queryClient.invalidateQueries({ queryKey: ['my-club'] });
             if (data.status === 'approved') {
-                toast({ title: "Approved!", description: "Member got XP and Club received +5 points." });
+                toast({ title: "Approved!", description: "Member got XP and Club received +25 points." });
             } else {
                 toast({ title: "Submission Rejected" });
             }
         }
     });
 
+    const updateTaskMutation = useMutation({
+        mutationFn: ({ id, data }: { id: string, data: any }) => api.updateTask(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['club-tasks'] });
+            toast({ title: "Task Updated" });
+            setIsManageAssigneesOpen(false);
+        }
+    });
+
+    const isOperationalMode = categoryFilter === 'operational';
+
     if (isLoadingTasks || isLoadingSubmissions || isLoadingHistory) {
         return <div className="flex flex-col items-center justify-center p-12 space-y-4">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="text-muted-foreground animate-pulse">Synchronizing task data...</p>
+            <p className="text-muted-foreground animate-pulse">Synchronizing Task Hub...</p>
         </div>;
     }
 
-    // Process all tasks into a single list
-    const safeActiveTasks = Array.isArray(activeTasks) ? activeTasks : [];
-    const safeHistoryTasks = Array.isArray(historyTasks) ? historyTasks : [];
+    const safeActiveTasks = Array.isArray(activeTasksArray) ? activeTasksArray : [];
+    const safeHistoryTasks = Array.isArray(historyTasksArray) ? historyTasksArray : [];
 
-    const allTasks = [...safeActiveTasks, ...safeHistoryTasks]
-        .sort((a: any, b: any) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return dateB - dateA;
-        })
-        .filter((t: any) =>
-            (t.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-            (t.category?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+    const liveTasks = safeActiveTasks.filter((t: any) => {
+        const matchesSearch = (t.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+            (t.category?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+        const matchesCategory = categoryFilter === 'all' ||
+            (categoryFilter === 'operational' ? t.category === 'operational' : t.category !== 'operational');
+        return matchesSearch && matchesCategory;
+    }).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const endedTasks = safeHistoryTasks.filter((t: any) => {
+        const matchesSearch = (t.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+            (t.category?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+        const matchesCategory = categoryFilter === 'all' ||
+            (categoryFilter === 'operational' ? t.category === 'operational' : t.category !== 'operational');
+        return matchesSearch && matchesCategory;
+    }).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const renderTaskCard = (t: any, isLive: boolean) => {
+        const taskSubmissions = submissions.filter((s: any) => s.taskId === (t._id || t.id));
+        const pendingCount = taskSubmissions.filter((s: any) => s.status === 'pending').length;
+        const approvedCount = taskSubmissions.filter((s: any) => s.status === 'approved').length;
+        const rejectedCount = taskSubmissions.filter((s: any) => s.status === 'rejected').length;
+
+        return (
+            <Dialog key={t._id} onOpenChange={(open) => { if (open) setSelectedTaskDetails(t); }}>
+                <DialogTrigger asChild>
+                    <Card className="group cursor-pointer rounded-[1.75rem] border-2 hover:border-primary transition-all duration-300 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-0.5">
+                        <CardContent className="p-0">
+                            <div className="flex flex-col md:flex-row items-stretch">
+                                {/* Left Info */}
+                                <div className="p-6 flex-1 space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <Badge variant={isLive ? "default" : "secondary"} className={`h-6 px-3 rounded-full font-black text-[9px] uppercase tracking-widest ${isLive ? 'bg-primary' : 'bg-slate-200 text-slate-600'}`}>
+                                            {t.category === 'operational' ? <Zap className="h-3 w-3 mr-1 fill-white" /> : (isLive ? <Zap className="h-3 w-3 mr-1 animate-pulse" /> : <Lock className="h-3 w-3 mr-1" />)}
+                                            {t.category === 'operational' ? "OPERATIONAL TASK" : (isLive ? "Live Now" : "Task Closed")}
+                                        </Badge>
+                                        <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
+                                            <Calendar className="h-3.5 w-3.5" /> Deployed: {new Date(t.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </span>
+                                        {t.deadline && (
+                                            <Badge variant="outline" className="h-6 px-3 rounded-full border-rose-200 bg-rose-50 text-rose-700 font-bold text-[9px] uppercase tracking-wider">
+                                                TASK DEADLINE: {new Date(t.deadline).toLocaleDateString()}
+                                            </Badge>
+                                        )}
+                                        {t.isMandatory && (
+                                            <Badge variant="outline" className="h-6 px-3 rounded-full border-blue-200 bg-blue-50 text-blue-700 font-bold text-[9px] uppercase tracking-wider">
+                                                Mandatory
+                                            </Badge>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <h4 className="text-xl font-black group-hover:text-primary transition-colors">{t.title}</h4>
+                                        <p className="text-sm text-muted-foreground font-medium line-clamp-1">{t.description}</p>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2">
+                                        <div className="h-8 px-4 rounded-xl bg-muted/60 flex items-center gap-2 text-[11px] font-bold">
+                                            <Trophy className="h-3.5 w-3.5 text-yellow-500" /> {t.pointsReward} XP for Students
+                                        </div>
+                                        <div className="h-8 px-4 rounded-xl bg-muted/60 flex items-center gap-2 text-[11px] font-bold">
+                                            {t.targetType === 'all' ? <Globe className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
+                                            {t.targetType} Scope
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right Metrics */}
+                                <div className="md:w-[280px] bg-muted/20 md:border-l flex flex-row md:flex-row items-center justify-between md:justify-start p-4 md:p-6 gap-4">
+                                    <div className="flex-1 grid grid-cols-2 gap-2">
+                                        <div className="bg-background rounded-xl sm:rounded-2xl p-2 sm:p-3 border flex flex-col items-center justify-center space-y-0.5">
+                                            <span className="text-[8px] sm:text-[10px] font-black uppercase text-muted-foreground">Submits</span>
+                                            <span className="text-sm sm:text-lg font-black">{taskSubmissions.length}</span>
+                                        </div>
+                                        <div className="bg-background rounded-xl sm:rounded-2xl p-2 sm:p-3 border flex flex-col items-center justify-center space-y-0.5">
+                                            <span className="text-[8px] sm:text-[10px] font-black uppercase text-emerald-600 leading-none text-center">Accepted</span>
+                                            <span className="text-sm sm:text-lg font-black text-emerald-700">{approvedCount}</span>
+                                        </div>
+                                    </div>
+                                    {pendingCount > 0 && !readOnly ? (
+                                        <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/30 animate-pulse relative shrink-0">
+                                            <AlertCircle className="h-5 w-5 sm:h-7 sm:w-7" />
+                                            <span className="absolute -top-1 -right-1 h-4 sm:h-6 min-w-[16px] sm:min-w-[24px] px-1 rounded-full bg-white text-orange-600 border-2 border-orange-500 flex items-center justify-center text-[8px] sm:text-[10px] font-black">
+                                                {pendingCount}
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all shrink-0">
+                                            <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </DialogTrigger>
+
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] border-2 shadow-2xl p-0 overflow-hidden">
+                    <div className="h-auto min-h-[120px] bg-gradient-to-r from-primary/20 via-primary/10 to-transparent p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-end justify-between border-b gap-4">
+                        <div className="space-y-1">
+                            <Badge className="bg-white text-primary border-primary/20 mb-2 font-bold">{t.category}</Badge>
+                            <h2 className="text-xl sm:text-3xl font-black tracking-tight leading-tight">{t.title}</h2>
+                        </div>
+                        <div className="flex flex-col items-start sm:items-end">
+                            <div className="text-2xl sm:text-4xl font-black text-primary">+{approvedCount * 25}</div>
+                            <p className="text-[9px] sm:text-[10px] font-black uppercase text-muted-foreground tracking-widest">Points Earned by Club</p>
+                        </div>
+                    </div>
+
+                    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+                        <div className="grid md:grid-cols-3 gap-8">
+                            {/* Main Content */}
+                            <div className="md:col-span-2 space-y-8">
+                                <div className="space-y-4">
+                                    <h5 className="flex items-center gap-2 font-black text-sm uppercase tracking-widest text-muted-foreground">
+                                        <Eye className="h-4 w-4" /> Task Description
+                                    </h5>
+                                    <p className="text-lg font-medium leading-relaxed bg-muted/30 p-6 rounded-3xl border-2 border-dashed">
+                                        {t.description || "No specific instructions provided."}
+                                    </p>
+                                </div>
+
+                                {/* Pending Reviews Section */}
+                                {isLive && !readOnly && (
+                                    <div className="space-y-4">
+                                        <h5 className="flex items-center gap-2 font-black text-sm uppercase tracking-widest text-orange-600">
+                                            <Clock className="h-4 w-4" /> Pending Approval ({pendingCount})
+                                        </h5>
+                                        <div className="space-y-3">
+                                            {pendingCount === 0 ? (
+                                                <div className="p-8 text-center bg-emerald-50 rounded-3xl border-2 border-emerald-100/50">
+                                                    <CheckCircle className="h-10 w-10 text-emerald-400 mx-auto mb-2" />
+                                                    <p className="font-bold text-emerald-800">All caught up!</p>
+                                                </div>
+                                            ) : taskSubmissions.filter((s: any) => s.status === 'pending').map((s: any) => (
+                                                <div key={s._id} className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 bg-orange-50 border-2 border-orange-100 rounded-2xl">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-10 w-10 rounded-xl bg-orange-200 flex items-center justify-center font-black text-orange-700">
+                                                            {s.userName?.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold">{s.userName}</p>
+                                                            <a href={s.submissionLink} target="_blank" rel="noreferrer" className="text-primary text-[11px] font-black flex items-center gap-1 hover:underline">
+                                                                View Proof <ExternalLink className="h-3 w-3" />
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col gap-2 w-full md:w-auto">
+                                                        <div className="flex items-center gap-2 bg-white p-1 rounded-xl border-2">
+                                                            <span className="text-[10px] font-black uppercase text-muted-foreground ml-2">Award XP:</span>
+                                                            <Input
+                                                                type="number"
+                                                                className="w-16 h-8 text-xs font-bold border-none focus-visible:ring-0"
+                                                                value={pointsInput[s._id] !== undefined ? pointsInput[s._id] : t.pointsReward}
+                                                                onChange={(e) => setPointsInput({ ...pointsInput, [s._id]: parseInt(e.target.value) })}
+                                                            />
+                                                            <span className="text-[10px] font-bold text-muted-foreground mr-2">/ {t.pointsReward}</span>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <Button
+                                                                size="sm"
+                                                                className="flex-1 md:flex-none h-10 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold"
+                                                                onClick={() => reviewMutation.mutate({
+                                                                    id: s._id,
+                                                                    reviewData: {
+                                                                        status: 'approved',
+                                                                        pointsAwarded: pointsInput[s._id] !== undefined ? pointsInput[s._id] : t.pointsReward,
+                                                                        reviewedBy: user?.name
+                                                                    }
+                                                                })}
+                                                                disabled={reviewMutation.isPending}
+                                                            >
+                                                                <Check className="h-4 w-4 mr-2" /> Approve
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="flex-1 md:flex-none h-10 px-6 rounded-xl border-2 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 font-bold"
+                                                                onClick={() => reviewMutation.mutate({
+                                                                    id: s._id,
+                                                                    reviewData: { status: 'rejected', reviewedBy: user?.name }
+                                                                })}
+                                                                disabled={reviewMutation.isPending}
+                                                            >
+                                                                <XCircle className="h-4 w-4 mr-2" /> Reject
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Completed Log */}
+                                <div className="space-y-4">
+                                    <h5 className="flex items-center gap-2 font-black text-sm uppercase tracking-widest text-emerald-600">
+                                        <CheckCircle className="h-4 w-4" /> Task History ({approvedCount + rejectedCount})
+                                    </h5>
+                                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                        {taskSubmissions.filter((s: any) => s.status !== 'pending').length === 0 ? (
+                                            <p className="text-center py-12 text-muted-foreground font-medium italic">No participation history recorded yet.</p>
+                                        ) : taskSubmissions.filter((s: any) => s.status !== 'pending').map((s: any) => (
+                                            <div key={s._id} className="flex items-center justify-between p-4 px-6 bg-background rounded-2xl border-2 hover:border-primary/20 transition-all">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-black ${s.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                        {s.userName?.charAt(0)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-bold leading-none">{s.userName}</p>
+                                                        <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase tracking-tight">{new Date(s.createdAt).toLocaleDateString()}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-6">
+                                                    <div className="text-right">
+                                                        <Badge className={`font-black text-[9px] uppercase tracking-widest px-3 ${s.status === 'approved' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                                                            {s.status}
+                                                        </Badge>
+                                                        {s.reviewedBy && (
+                                                            <div className="text-[9px] font-black text-muted-foreground/60 mt-0.5">By {s.reviewedBy}</div>
+                                                        )}
+                                                    </div>
+                                                    <a href={s.submissionLink} target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
+                                                        <ExternalLink className="h-4 w-4" />
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right Sidebar */}
+                            <div className="space-y-8">
+                                <div className="bg-primary/5 p-6 rounded-[2rem] border-2 border-primary/20 space-y-6">
+                                    <h6 className="font-black text-xs uppercase tracking-widest text-primary">Task Snapshot</h6>
+
+                                    {isOperationalMode && t.targetType === 'specific' && !readOnly && isLive && (
+                                        <Button
+                                            variant="outline"
+                                            className="w-full h-11 rounded-xl border-dashed border-2 hover:bg-primary/5 font-bold"
+                                            onClick={() => {
+                                                setEditingAssignees(t.targetEmails || []);
+                                                setIsManageAssigneesOpen(true);
+                                            }}
+                                        >
+                                            <Users className="h-4 w-4 mr-2" /> Manage Assignees
+                                        </Button>
+                                    )}
+
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground font-bold italic">Integrity Index</span>
+                                            <span className="font-black text-primary">{taskSubmissions.length > 0 ? Math.round((approvedCount / taskSubmissions.length) * 100) : 0}%</span>
+                                        </div>
+                                        <div className="h-3 w-full bg-primary/10 rounded-full overflow-hidden border">
+                                            <div
+                                                className="h-full bg-primary transition-all duration-1000"
+                                                style={{ width: `${taskSubmissions.length > 0 ? (approvedCount / taskSubmissions.length) * 100 : 0}%` }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 pt-4">
+                                        <div className="flex flex-col">
+                                            <span className="text-[9px] font-black uppercase text-muted-foreground">Student Earns</span>
+                                            <span className="text-lg font-black">{t.pointsReward} XP</span>
+                                        </div>
+                                        <div className="flex flex-col border-l pl-4">
+                                            <span className="text-[9px] font-black uppercase text-muted-foreground">Participation</span>
+                                            <span className="text-lg font-black">{taskSubmissions.length} Users</span>
+                                        </div>
+                                    </div>
+
+                                    {!readOnly && isLive && (
+                                        <Button
+                                            variant="destructive"
+                                            className="w-full h-12 rounded-2xl gap-2 font-black uppercase tracking-widest shadow-xl shadow-rose-200"
+                                            onClick={() => {
+                                                if (confirm('Permanently close this task? Submissions will still be archived.')) {
+                                                    deleteMutation.mutate(t._id);
+                                                }
+                                            }}
+                                        >
+                                            <Lock className="h-4 w-4" /> End Task
+                                        </Button>
+                                    )}
+                                </div>
+
+                                <div className="space-y-4 px-2">
+                                    <h6 className="font-black text-xs uppercase tracking-widest text-muted-foreground">Task Metadata</h6>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-3 text-sm">
+                                            <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground"><Calendar className="h-4 w-4" /></div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-muted-foreground uppercase leading-none">Deployed</p>
+                                                <p className="font-bold">{new Date(t.createdAt).toDateString()}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-sm">
+                                            <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground"><Shield className="h-4 w-4" /></div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-muted-foreground uppercase leading-none">Security Level</p>
+                                                <p className="font-bold">Verified Audit Log</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         );
+    };
 
     return (
         <div className="space-y-6">
@@ -148,30 +487,32 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                             <div className={`p-2 rounded-xl ${readOnly ? 'bg-slate-200' : 'bg-primary/20'}`}>
                                 {readOnly ? <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-slate-600" /> : <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-primary fill-primary/20" />}
                             </div>
-                            <h3 className="text-xl sm:text-2xl font-black tracking-tight">Task Hub</h3>
+                            <h3 className="text-xl sm:text-2xl font-black tracking-tight">{isOperationalMode ? "Operational Work Logs" : "The Task Hub"}</h3>
                         </div>
                         <p className="text-xs sm:text-sm text-muted-foreground font-medium">
                             {readOnly
-                                ? "Complete audit trail of all club activities and submissions."
-                                : `Activity dashboard for ${clubName || 'your club'}. Manage lifecycle and verify integrity.`}
+                                ? `Complete audit trail of all club ${isOperationalMode ? 'assignments' : 'tasks'} and submissions.`
+                                : isOperationalMode
+                                    ? `Track operational log history and manage active work assignments.`
+                                    : `Activity dashboard for ${clubName || 'your club'}. Manage lifecycle and verify integrity.`}
                         </p>
                     </div>
 
-                    {!readOnly && (
+                    {!readOnly && !isOperationalMode && (
                         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                             <DialogTrigger asChild>
                                 <Button className="w-full sm:w-auto h-11 sm:h-12 px-6 rounded-xl sm:rounded-2xl gap-2 shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all font-bold text-sm">
-                                    <Plus className="h-4 w-4 sm:h-5 sm:w-5" /> Launch Activity
+                                    <Plus className="h-4 w-4 sm:h-5 sm:w-5" /> Launch Task
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-[550px] rounded-[2rem] border-2 shadow-2xl">
                                 <DialogHeader>
-                                    <DialogTitle className="text-3xl font-black bg-gradient-to-br from-primary to-primary/60 bg-clip-text text-transparent italic">PUBLISH TASK</DialogTitle>
+                                    <DialogTitle className="text-3xl font-black bg-gradient-to-br from-primary to-primary/60 bg-clip-text text-transparent italic uppercase tracking-tighter">DEPLOY TASK</DialogTitle>
                                     <DialogDescription className="font-medium text-muted-foreground/80">Create engaging tasks to activate your community and grow club presence.</DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-6 py-4">
                                     <div className="space-y-2">
-                                        <Label className="text-sm font-bold ml-1">Title of Activity</Label>
+                                        <Label className="text-sm font-bold ml-1">Title of Task</Label>
                                         <Input
                                             placeholder="e.g., Tech Workshop Promotion"
                                             value={newTask.title}
@@ -180,9 +521,9 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-sm font-bold ml-1">Instructions / Goal</Label>
+                                        <Label className="text-sm font-bold ml-1">Task Instructions / Goal (Mandatory)</Label>
                                         <Textarea
-                                            placeholder="What exactly do members need to do?"
+                                            placeholder="What exactly do members need to do? Instructions are required to deploy."
                                             value={newTask.description}
                                             onChange={e => setNewTask({ ...newTask, description: e.target.value })}
                                             className="min-h-[120px] rounded-xl border-2 focus:ring-0 focus:border-primary transition-all font-medium"
@@ -190,14 +531,17 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
-                                            <Label className="text-sm font-bold ml-1">Student Reward (XP)</Label>
+                                            <Label className="text-sm font-bold ml-1 flex justify-between">
+                                                Student Reward (XP)
+                                                <span className="text-[9px] text-muted-foreground uppercase font-mono">Fixed Reward</span>
+                                            </Label>
                                             <div className="relative">
-                                                <Trophy className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-yellow-500" />
+                                                <Trophy className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
                                                 <Input
                                                     type="number"
-                                                    value={newTask.pointsReward}
-                                                    onChange={e => setNewTask({ ...newTask, pointsReward: parseInt(e.target.value) })}
-                                                    className="pl-11 h-12 rounded-xl border-2"
+                                                    value={25}
+                                                    readOnly
+                                                    className="pl-11 h-12 rounded-xl border-2 bg-muted font-bold"
                                                 />
                                             </div>
                                         </div>
@@ -216,6 +560,33 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                                             </Select>
                                         </div>
                                     </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-bold ml-1">Task Deadline</Label>
+                                            <Input
+                                                type="date"
+                                                min={new Date().toISOString().split('T')[0]}
+                                                value={newTask.deadline}
+                                                onChange={e => setNewTask({ ...newTask, deadline: e.target.value })}
+                                                className="h-12 rounded-xl border-2 font-semibold"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-bold ml-1">Task Priority</Label>
+                                            <div
+                                                onClick={() => setNewTask({ ...newTask, isMandatory: !newTask.isMandatory })}
+                                                className={`flex items-center gap-3 px-4 rounded-xl border-2 transition-all cursor-pointer h-12 ${newTask.isMandatory ? 'border-primary bg-primary/5' : 'border-secondary/20 bg-white'
+                                                    }`}
+                                            >
+                                                <Checkbox
+                                                    checked={newTask.isMandatory}
+                                                    onCheckedChange={() => setNewTask({ ...newTask, isMandatory: !newTask.isMandatory })}
+                                                />
+                                                <span className="font-bold text-xs uppercase text-slate-700">Mandatory</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                     {newTask.targetType === 'specific' && (
                                         <div className="space-y-2 animate-in slide-in-from-top-2">
                                             <Label className="text-sm font-bold ml-1">Target Emails (comma separated)</Label>
@@ -230,13 +601,13 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                                 </div>
                                 <DialogFooter className="bg-muted/30 -mx-6 -mb-6 p-6 rounded-b-[2rem]">
                                     <div className="flex w-full items-center justify-between">
-                                        <Badge variant="outline" className="h-8 px-4 rounded-full bg-emerald-50 text-emerald-700 border-emerald-200 font-bold uppercase tracking-wider text-[10px]">
-                                            Earns +20 Club Pts
+                                        <Badge variant="outline" className="h-8 px-4 rounded-full bg-slate-50 text-slate-500 border-slate-200 font-bold uppercase tracking-wider text-[10px]">
+                                            Rewards Pending Completion
                                         </Badge>
                                         <Button
                                             onClick={() => createMutation.mutate(newTask)}
-                                            disabled={!newTask.title || createMutation.isPending}
-                                            className="h-12 px-8 rounded-xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+                                            disabled={!newTask.title || !newTask.description.trim() || createMutation.isPending}
+                                            className="h-12 px-8 rounded-xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all"
                                         >
                                             {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Deploy Task"}
                                         </Button>
@@ -258,279 +629,96 @@ export function ManageClubTasks({ clubId, clubName, readOnly = false }: { clubId
                 </div>
             </div>
 
-            {/* Tasks List */}
-            <div className="grid gap-4">
-                {allTasks.length === 0 ? (
-                    <div className="py-24 text-center space-y-4 bg-muted/20 rounded-[2.5rem] border-2 border-dashed">
-                        <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mx-auto opacity-50">
-                            <Clock className="h-8 w-8 text-muted-foreground" />
-                        </div>
-                        <div>
-                            <h4 className="text-xl font-bold">No tasks matching filters</h4>
-                            <p className="text-muted-foreground font-medium">Broaden your search or launch a new activity.</p>
-                        </div>
+            {/* Tasks Lists */}
+            <div className="space-y-12">
+                {/* Live Tasks Section */}
+                <section className="space-y-6">
+                    <div className="flex items-center gap-3 px-2">
+                        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <h4 className="text-sm font-black uppercase tracking-[0.2em] text-muted-foreground">
+                            {isOperationalMode ? "Active Work Logs" : "Live Tasks"}
+                        </h4>
+                        <div className="h-[1px] flex-1 bg-gradient-to-r from-muted to-transparent" />
                     </div>
-                ) : allTasks.map((t: any) => {
-                    const taskSubmissions = submissions.filter((s: any) => s.taskId === (t._id || t.id));
-                    const pendingCount = taskSubmissions.filter((s: any) => s.status === 'pending').length;
-                    const approvedCount = taskSubmissions.filter((s: any) => s.status === 'approved').length;
-                    const rejectedCount = taskSubmissions.filter((s: any) => s.status === 'rejected').length;
-                    const isLive = t.status === 'active';
+                    <div className="grid gap-4">
+                        {liveTasks.length === 0 ? (
+                            <div className="py-12 text-center bg-muted/5 rounded-3xl border-2 border-dashed">
+                                <p className="text-sm text-muted-foreground font-medium">No active tasks running.</p>
+                            </div>
+                        ) : liveTasks.map((t: any) => renderTaskCard(t, true))}
+                    </div>
+                </section>
 
-                    return (
-                        <Dialog key={t._id} onOpenChange={(open) => { if (open) setSelectedTaskDetails(t); }}>
-                            <DialogTrigger asChild>
-                                <Card className="group cursor-pointer rounded-[1.75rem] border-2 hover:border-primary transition-all duration-300 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-0.5">
-                                    <CardContent className="p-0">
-                                        <div className="flex flex-col md:flex-row items-stretch">
-                                            {/* Left Info */}
-                                            <div className="p-6 flex-1 space-y-4">
-                                                <div className="flex items-center gap-3">
-                                                    <Badge variant={isLive ? "default" : "secondary"} className={`h-6 px-3 rounded-full font-black text-[9px] uppercase tracking-widest ${isLive ? 'bg-primary' : 'bg-slate-200 text-slate-600'}`}>
-                                                        {isLive ? <Zap className="h-3 w-3 mr-1 animate-pulse" /> : <Lock className="h-3 w-3 mr-1" />}
-                                                        {isLive ? "Live Now" : "Task Closed"}
-                                                    </Badge>
-                                                    <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
-                                                        <Calendar className="h-3.5 w-3.5" /> {new Date(t.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                    </span>
-                                                </div>
-
-                                                <div className="space-y-1">
-                                                    <h4 className="text-xl font-black group-hover:text-primary transition-colors">{t.title}</h4>
-                                                    <p className="text-sm text-muted-foreground font-medium line-clamp-1">{t.description}</p>
-                                                </div>
-
-                                                <div className="flex flex-wrap gap-2">
-                                                    <div className="h-8 px-4 rounded-xl bg-muted/60 flex items-center gap-2 text-[11px] font-bold">
-                                                        <Trophy className="h-3.5 w-3.5 text-yellow-500" /> {t.pointsReward} XP for Students
-                                                    </div>
-                                                    <div className="h-8 px-4 rounded-xl bg-muted/60 flex items-center gap-2 text-[11px] font-bold">
-                                                        {t.targetType === 'all' ? <Globe className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
-                                                        {t.targetType} Scope
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Right Metrics */}
-                                            <div className="md:w-[280px] bg-muted/20 md:border-l flex flex-row md:flex-row items-center justify-between md:justify-start p-4 md:p-6 gap-4">
-                                                <div className="flex-1 grid grid-cols-2 gap-2">
-                                                    <div className="bg-background rounded-xl sm:rounded-2xl p-2 sm:p-3 border flex flex-col items-center justify-center space-y-0.5">
-                                                        <span className="text-[8px] sm:text-[10px] font-black uppercase text-muted-foreground">Submits</span>
-                                                        <span className="text-sm sm:text-lg font-black">{taskSubmissions.length}</span>
-                                                    </div>
-                                                    <div className="bg-background rounded-xl sm:rounded-2xl p-2 sm:p-3 border flex flex-col items-center justify-center space-y-0.5">
-                                                        <span className="text-[8px] sm:text-[10px] font-black uppercase text-emerald-600 leading-none text-center">Accepted</span>
-                                                        <span className="text-sm sm:text-lg font-black text-emerald-700">{approvedCount}</span>
-                                                    </div>
-                                                </div>
-                                                {pendingCount > 0 && !readOnly ? (
-                                                    <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/30 animate-pulse relative shrink-0">
-                                                        <AlertCircle className="h-5 w-5 sm:h-7 sm:w-7" />
-                                                        <span className="absolute -top-1 -right-1 h-4 sm:h-6 min-w-[16px] sm:min-w-[24px] px-1 rounded-full bg-white text-orange-600 border-2 border-orange-500 flex items-center justify-center text-[8px] sm:text-[10px] font-black">
-                                                            {pendingCount}
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all shrink-0">
-                                                        <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </DialogTrigger>
-
-                            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] border-2 shadow-2xl p-0 overflow-hidden">
-                                <div className="h-auto min-h-[120px] bg-gradient-to-r from-primary/20 via-primary/10 to-transparent p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-end justify-between border-b gap-4">
-                                    <div className="space-y-1">
-                                        <Badge className="bg-white text-primary border-primary/20 mb-2 font-bold">{t.category}</Badge>
-                                        <h2 className="text-xl sm:text-3xl font-black tracking-tight leading-tight">{t.title}</h2>
-                                    </div>
-                                    <div className="flex flex-col items-start sm:items-end">
-                                        <div className="text-2xl sm:text-4xl font-black text-primary">+{20 + (approvedCount * 5)}</div>
-                                        <p className="text-[9px] sm:text-[10px] font-black uppercase text-muted-foreground tracking-widest">Points Earned by Club</p>
-                                    </div>
-                                </div>
-
-                                <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
-                                    <div className="grid md:grid-cols-3 gap-8">
-                                        {/* Main Content */}
-                                        <div className="md:col-span-2 space-y-8">
-                                            <div className="space-y-4">
-                                                <h5 className="flex items-center gap-2 font-black text-sm uppercase tracking-widest text-muted-foreground">
-                                                    <Eye className="h-4 w-4" /> Activity Description
-                                                </h5>
-                                                <p className="text-lg font-medium leading-relaxed bg-muted/30 p-6 rounded-3xl border-2 border-dashed">
-                                                    {t.description || "No specific instructions provided."}
-                                                </p>
-                                            </div>
-
-                                            {/* Pending Reviews Section */}
-                                            {isLive && !readOnly && (
-                                                <div className="space-y-4">
-                                                    <h5 className="flex items-center gap-2 font-black text-sm uppercase tracking-widest text-orange-600">
-                                                        <Clock className="h-4 w-4" /> Pending Approval ({pendingCount})
-                                                    </h5>
-                                                    <div className="space-y-3">
-                                                        {pendingCount === 0 ? (
-                                                            <div className="p-8 text-center bg-emerald-50 rounded-3xl border-2 border-emerald-100/50">
-                                                                <CheckCircle className="h-10 w-10 text-emerald-400 mx-auto mb-2" />
-                                                                <p className="font-bold text-emerald-800">All caught up!</p>
-                                                            </div>
-                                                        ) : taskSubmissions.filter((s: any) => s.status === 'pending').map((s: any) => (
-                                                            <div key={s._id} className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 bg-orange-50 border-2 border-orange-100 rounded-2xl">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="h-10 w-10 rounded-xl bg-orange-200 flex items-center justify-center font-black text-orange-700">
-                                                                        {s.userName?.charAt(0).toUpperCase()}
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="font-bold">{s.userName}</p>
-                                                                        <a href={s.submissionLink} target="_blank" rel="noreferrer" className="text-primary text-[11px] font-black flex items-center gap-1 hover:underline">
-                                                                            View Proof <ExternalLink className="h-3 w-3" />
-                                                                        </a>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex gap-2 w-full md:w-auto">
-                                                                    <Button
-                                                                        size="sm"
-                                                                        className="flex-1 md:flex-none h-10 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold"
-                                                                        onClick={() => reviewMutation.mutate({
-                                                                            id: s._id,
-                                                                            reviewData: { status: 'approved', pointsAwarded: t.pointsReward, reviewedBy: user?.name }
-                                                                        })}
-                                                                        disabled={reviewMutation.isPending}
-                                                                    >
-                                                                        <Check className="h-4 w-4 mr-2" /> Approve
-                                                                    </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        className="flex-1 md:flex-none h-10 px-6 rounded-xl border-2 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 font-bold"
-                                                                        onClick={() => reviewMutation.mutate({
-                                                                            id: s._id,
-                                                                            reviewData: { status: 'rejected', reviewedBy: user?.name }
-                                                                        })}
-                                                                        disabled={reviewMutation.isPending}
-                                                                    >
-                                                                        <XCircle className="h-4 w-4 mr-2" /> Reject
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Completed Log */}
-                                            <div className="space-y-4">
-                                                <h5 className="flex items-center gap-2 font-black text-sm uppercase tracking-widest text-emerald-600">
-                                                    <CheckCircle className="h-4 w-4" /> Activity Log ({approvedCount + rejectedCount})
-                                                </h5>
-                                                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                                                    {taskSubmissions.filter((s: any) => s.status !== 'pending').length === 0 ? (
-                                                        <p className="text-center py-12 text-muted-foreground font-medium italic">No participation history recorded yet.</p>
-                                                    ) : taskSubmissions.filter((s: any) => s.status !== 'pending').map((s: any) => (
-                                                        <div key={s._id} className="flex items-center justify-between p-4 px-6 bg-background rounded-2xl border-2 hover:border-primary/20 transition-all">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-black ${s.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                                    {s.userName?.charAt(0)}
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-sm font-bold leading-none">{s.userName}</p>
-                                                                    <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase tracking-tight">{new Date(s.createdAt).toLocaleDateString()}</p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-6">
-                                                                <div className="text-right">
-                                                                    <Badge className={`font-black text-[9px] uppercase tracking-widest px-3 ${s.status === 'approved' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                                                                        {s.status}
-                                                                    </Badge>
-                                                                    {s.reviewedBy && (
-                                                                        <div className="text-[9px] font-black text-muted-foreground/60 mt-0.5">By {s.reviewedBy}</div>
-                                                                    )}
-                                                                </div>
-                                                                <a href={s.submissionLink} target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                                                                    <ExternalLink className="h-4 w-4" />
-                                                                </a>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Right Sidebar */}
-                                        <div className="space-y-8">
-                                            <div className="bg-primary/5 p-6 rounded-[2rem] border-2 border-primary/20 space-y-6">
-                                                <h6 className="font-black text-xs uppercase tracking-widest text-primary">Task Snapshot</h6>
-
-                                                <div className="space-y-4">
-                                                    <div className="flex items-center justify-between text-sm">
-                                                        <span className="text-muted-foreground font-bold italic">Integrity Index</span>
-                                                        <span className="font-black text-primary">{taskSubmissions.length > 0 ? Math.round((approvedCount / taskSubmissions.length) * 100) : 0}%</span>
-                                                    </div>
-                                                    <div className="h-3 w-full bg-primary/10 rounded-full overflow-hidden border">
-                                                        <div
-                                                            className="h-full bg-primary transition-all duration-1000"
-                                                            style={{ width: `${taskSubmissions.length > 0 ? (approvedCount / taskSubmissions.length) * 100 : 0}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-4 pt-4">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-black uppercase text-muted-foreground">Student Earns</span>
-                                                        <span className="text-lg font-black">{t.pointsReward} XP</span>
-                                                    </div>
-                                                    <div className="flex flex-col border-l pl-4">
-                                                        <span className="text-[9px] font-black uppercase text-muted-foreground">Participation</span>
-                                                        <span className="text-lg font-black">{taskSubmissions.length} Users</span>
-                                                    </div>
-                                                </div>
-
-                                                {!readOnly && isLive && (
-                                                    <Button
-                                                        variant="destructive"
-                                                        className="w-full h-12 rounded-2xl gap-2 font-black uppercase tracking-widest shadow-xl shadow-rose-200"
-                                                        onClick={() => {
-                                                            if (confirm('Permanently close this task? Submissions will still be archived.')) {
-                                                                deleteMutation.mutate(t._id);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <Lock className="h-4 w-4" /> End Activity
-                                                    </Button>
-                                                )}
-                                            </div>
-
-                                            <div className="space-y-4 px-2">
-                                                <h6 className="font-black text-xs uppercase tracking-widest text-muted-foreground">Task Metadata</h6>
-                                                <div className="space-y-3">
-                                                    <div className="flex items-center gap-3 text-sm">
-                                                        <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground"><Calendar className="h-4 w-4" /></div>
-                                                        <div>
-                                                            <p className="text-[10px] font-black text-muted-foreground uppercase leading-none">Deployed</p>
-                                                            <p className="font-bold">{new Date(t.createdAt).toDateString()}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-3 text-sm">
-                                                        <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground"><Shield className="h-4 w-4" /></div>
-                                                        <div>
-                                                            <p className="text-[10px] font-black text-muted-foreground uppercase leading-none">Security Level</p>
-                                                            <p className="font-bold">Verified Audit Log</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </DialogContent>
-                        </Dialog>
-                    );
-                })}
+                {/* Ended Tasks Section */}
+                <section className="space-y-6">
+                    <div className="flex items-center gap-3 px-2">
+                        <div className="h-2 w-2 rounded-full bg-slate-400" />
+                        <h4 className="text-sm font-black uppercase tracking-[0.2em] text-muted-foreground text-slate-400">
+                            {isOperationalMode ? "Operational Work History" : "Ended Tasks (Archive)"}
+                        </h4>
+                        <div className="h-[1px] flex-1 bg-gradient-to-r from-muted to-transparent" />
+                    </div>
+                    <div className="grid gap-4 opacity-75 hover:opacity-100 transition-opacity">
+                        {endedTasks.length === 0 ? (
+                            <p className="text-sm text-muted-foreground font-medium px-4 italic">No tasks in archive.</p>
+                        ) : endedTasks.map((t: any) => renderTaskCard(t, false))}
+                    </div>
+                </section>
             </div>
+
+            {/* Manage Assignees Dialog */}
+            {isOperationalMode && (
+                <Dialog open={isManageAssigneesOpen} onOpenChange={setIsManageAssigneesOpen}>
+                    <DialogContent className="max-w-2xl rounded-[2.5rem]">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl font-black uppercase italic tracking-tight">Manage Task Assignees</DialogTitle>
+                            <DialogDescription>Add or remove members for "{selectedTaskDetails?.title}"</DialogDescription>
+                        </DialogHeader>
+                        <div className="py-6 space-y-4">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Filter members..." className="pl-10 h-11 rounded-xl" />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {clubMembers.map((member: any) => {
+                                    const isAssigned = editingAssignees.includes(member.email);
+                                    return (
+                                        <div
+                                            key={member.id || member._id}
+                                            onClick={() => {
+                                                if (isAssigned) setEditingAssignees(prev => prev.filter(e => e !== member.email));
+                                                else setEditingAssignees(prev => [...prev, member.email]);
+                                            }}
+                                            className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${isAssigned ? 'bg-primary/5 border-primary shadow-sm' : 'bg-muted/10 border-transparent hover:border-primary/20'}`}
+                                        >
+                                            <Checkbox checked={isAssigned} />
+                                            <div className="min-w-0">
+                                                <p className="font-bold text-xs truncate">{member.name}</p>
+                                                <p className="text-[10px] text-muted-foreground truncate">{member.email}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <div className="flex w-full items-center justify-between">
+                                <span className="text-[10px] font-black text-muted-foreground uppercase">{editingAssignees.length} Members Assigned</span>
+                                <Button
+                                    onClick={() => updateTaskMutation.mutate({
+                                        id: selectedTaskDetails._id,
+                                        data: { targetEmails: editingAssignees }
+                                    })}
+                                    disabled={updateTaskMutation.isPending}
+                                    className="rounded-xl font-black h-11 px-8"
+                                >
+                                    {updateTaskMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Save Changes"}
+                                </Button>
+                            </div>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 }

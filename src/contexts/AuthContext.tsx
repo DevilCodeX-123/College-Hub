@@ -44,15 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(userData); // Set immediately from cache
 
           // Then fetch fresh data
-          const freshUser = await api.getProfile(userData.id);
+          const freshUser = await api.getProfile(userData.id || (userData as any)._id);
           setUser(freshUser);
           localStorage.setItem('user', JSON.stringify(freshUser));
         } catch (err) {
           console.error('Failed to sync user data:', err);
           // If token is invalid/expired, stay as is or logout
+        } finally {
+          setLoading(false);
         }
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchUser();

@@ -22,7 +22,9 @@ export function Header() {
           <div className="h-9 w-9 rounded-lg gradient-primary flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-lg">C</span>
           </div>
-          <span className="font-bold text-xl hidden sm:block">Campus Hub</span>
+          <span className="font-bold text-xl hidden sm:block">
+            {JSON.parse(localStorage.getItem('platform_settings') || '{}').appName || 'Campus Hub'}
+          </span>
         </Link>
 
         {/* Right Section */}

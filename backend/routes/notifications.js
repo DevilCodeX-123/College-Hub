@@ -12,38 +12,29 @@ const User = require('../models/User');
 
 router.get('/', async (req, res) => {
     try {
-        const { userId, role } = req.query; // Expecting query params for simplicity as auth middleware isn't universal yet
+        const { userId, role } = req.query;
 
         if (!userId) return res.status(400).json({ message: 'User ID required' });
 
-        // Find individual messages OR messages for their role OR 'all'
-        const notifications = await Notification.find({
-            $or: [
-                { recipient: userId },
-                { recipient: 'all' },
-                { recipient: role === 'admin' ? 'admins' : role === 'student' ? 'students' : 'others' }, // Simplified role mapping needed
-                // Better approach:
-                { recipient: 'students' }, // If user is student
-                { recipient: 'coordinators' } // If user is coordinator
-            ]
-        }).sort({ createdAt: -1 });
+        // Map roles to recipient group identifiers
+        const roleGroups = ['all'];
+        if (role === 'student') roleGroups.push('students');
+        if (role === 'club_member' || role === 'core_member') roleGroups.push('students', 'members');
+        if (role === 'club_coordinator' || role === 'club_co_coordinator' || role === 'club_head') roleGroups.push('coordinators', 'admins');
+        if (role === 'admin' || role === 'co_admin') roleGroups.push('admins', 'students', 'coordinators');
+        if (role === 'owner') roleGroups.push('owner', 'admins', 'students', 'coordinators');
 
-        // Filter based on actual role matches if needed, but the $or query above is rough.
-        // Let's make it cleaner:
+        console.log(`Fetching notifications for UserID: ${userId}, Role: ${role}, RoleGroups: ${roleGroups}`);
 
         const query = {
             $or: [
-                { recipient: userId }, // Direct message
-                { recipient: 'all' }   // Global message
+                { recipient: userId },         // Direct message
+                { recipient: { $in: roleGroups } } // Role-based or Global
             ]
         };
 
-        if (role === 'student') query.$or.push({ recipient: 'students' });
-        if (role === 'club_coordinator') query.$or.push({ recipient: 'coordinators' });
-        if (role === 'admin') query.$or.push({ recipient: 'admins' });
-
-        const finalNotifications = await Notification.find(query).sort({ createdAt: -1 });
-        res.json(finalNotifications);
+        const notifications = await Notification.find(query).sort({ createdAt: -1 });
+        res.json(notifications);
 
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -53,7 +44,7 @@ router.get('/', async (req, res) => {
 // POST send notification
 router.post('/', async (req, res) => {
     try {
-        const { recipient, title, message, senderId, type } = req.body;
+        const { recipient, title, message, senderId, type, category } = req.body;
         console.log('Notification Request Body:', req.body);
         console.log('SenderID Type:', typeof senderId, 'Value:', senderId);
 
@@ -67,19 +58,18 @@ router.post('/', async (req, res) => {
 
         const notification = new Notification({
             recipient: finalRecipient,
-            sender: senderId, // Correct: The schema expects 'sender', but we are passing it 'senderId' from frontend, so variable name here is fine, but lets check schema.
-            // Wait, schema has 'sender' field. In destructuring above we have 'senderId'. 
-            // So: sender: senderId is correct IF schema has 'sender'.
-            // Let me re-read schema.
+            sender: senderId,
             title,
             message,
-            type
+            type,
+            category: category || 'general'
         });
 
+        console.log('Attempting to save notification:', { recipient: finalRecipient, title, senderId });
         await notification.save();
         res.status(201).json(notification);
     } catch (err) {
-        console.error('Notification Send Error:', err.message);
+        console.error('Notification Creation Error:', err.message);
         res.status(400).json({ message: err.message });
     }
 });
@@ -98,6 +88,40 @@ router.put('/:id/read', async (req, res) => {
         }
 
         res.json(notification);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// PUT mark all as read for a user
+router.put('/mark-all-read', async (req, res) => {
+    try {
+        const { userId, role } = req.body;
+
+        if (!userId) return res.status(400).json({ message: 'User ID required' });
+
+        // Identify which notifications the user can see (sync with GET route)
+        const roleGroups = ['all'];
+        if (role === 'student') roleGroups.push('students');
+        if (role === 'club_member' || role === 'core_member') roleGroups.push('students', 'members');
+        if (role === 'club_coordinator' || role === 'club_co_coordinator' || role === 'club_head') roleGroups.push('coordinators', 'admins');
+        if (role === 'admin' || role === 'co_admin') roleGroups.push('admins', 'students', 'coordinators');
+        if (role === 'owner') roleGroups.push('owner', 'admins', 'students', 'coordinators');
+
+        const query = {
+            $or: [
+                { recipient: userId },
+                { recipient: { $in: roleGroups } }
+            ],
+            readBy: { $ne: userId } // Only unread ones
+        };
+
+        const result = await Notification.updateMany(
+            query,
+            { $addToSet: { readBy: userId } }
+        );
+
+        res.json({ message: 'All notifications marked as read', modifiedCount: result.modifiedCount });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

@@ -12,11 +12,11 @@ const getAuthDetails = () => {
 
 export const api = {
     // Auth
-    register: async (userData: any) => {
+    register: async (userData: Partial<User>) => {
         const response = await axios.post(`${API_URL}/auth/register`, userData);
         return response.data;
     },
-    login: async (credentials: any) => {
+    login: async (credentials: Record<string, string>) => {
         const response = await axios.post(`${API_URL}/auth/login`, credentials);
         return response.data;
     },
@@ -24,7 +24,7 @@ export const api = {
         const response = await axios.get<string[]>(`${API_URL}/auth/colleges`);
         return response.data;
     },
-    createCollegeAdmin: async (adminData: any) => {
+    createCollegeAdmin: async (adminData: Partial<User>) => {
         const response = await axios.post(`${API_URL}/auth/admin`, adminData);
         return response.data;
     },
@@ -32,7 +32,7 @@ export const api = {
         const response = await axios.post(`${API_URL}/auth/forgot-password`, { email });
         return response.data;
     },
-    changePassword: async (data: any) => {
+    changePassword: async (data: Record<string, string>) => {
         const response = await axios.post(`${API_URL}/auth/change-password`, data, getAuthDetails());
         return response.data;
     },
@@ -129,6 +129,10 @@ export const api = {
         });
         return response.data;
     },
+    getChallenge: async (id: string) => {
+        const response = await axios.get<Challenge>(`${API_URL}/challenges/${id}`, getAuthDetails());
+        return response.data;
+    },
     createChallenge: async (challengeData: Partial<Challenge>) => {
         const response = await axios.post<Challenge>(`${API_URL}/challenges`, challengeData, getAuthDetails());
         return response.data;
@@ -147,11 +151,13 @@ export const api = {
     },
 
     // Events
-    getEvents: (college?: string) => axios.get(`${API_URL}/events`, { params: { college } }).then(res => res.data),
+    getEvents: (college?: string, clubId?: string) => axios.get(`${API_URL}/events`, { params: { college, clubId } }).then(res => res.data),
     createEvent: (eventData: any) => axios.post(`${API_URL}/events`, eventData).then(res => res.data),
     updateEvent: (eventId: string, data: any) => axios.put(`${API_URL}/events/${eventId}`, data).then(res => res.data),
     registerEvent: (eventId: string, data: any) => axios.post(`${API_URL}/events/${eventId}/register`, data).then(res => res.data),
+    updateEventRegistration: (eventId: string, userId: string, data: any) => axios.put(`${API_URL}/events/${eventId}/registration/${userId}`, data).then(res => res.data),
     completeEvent: (eventId: string, data: any) => axios.post(`${API_URL}/events/${eventId}/complete`, data).then(res => res.data),
+    deleteEvent: (eventId: string) => axios.delete(`${API_URL}/events/${eventId}`, getAuthDetails()).then(res => res.data),
 
     // Projects
     getProjects: async (college?: string, clubId?: string, userId?: string, requestingUserId?: string) => {
@@ -167,6 +173,7 @@ export const api = {
     },
     createProject: async (projectData: Partial<Project>) => {
         const response = await axios.post<Project>(`${API_URL}/projects`, projectData, getAuthDetails());
+        return response.data;
     },
     joinProjectByCode: async (userId: string, joinCode: string) => {
         const response = await axios.post(`${API_URL}/projects/join-by-code`, { userId, joinCode }, getAuthDetails());
@@ -204,20 +211,28 @@ export const api = {
         const response = await axios.patch(`${API_URL}/projects/${id}/progress`, { progress, requestingUserId }, getAuthDetails());
         return response.data;
     },
-    addProjectGoal: async (id: string, goalData: { title: string, deadline: string, assigneeId?: string, assigneeName?: string, requestingUserId: string }) => {
+    addProjectGoal: async (id: string, goalData: { title: string, description?: string, deadline: string, assignedType: 'all' | 'specific', assignees: string[], requestingUserId: string, submissionKey?: string, requirementKey?: string }) => {
         const response = await axios.post(`${API_URL}/projects/${id}/goals`, goalData, getAuthDetails());
         return response.data;
     },
-    submitProjectGoal: async (id: string, goalId: string, submissionLink: string, requestingUserId: string) => {
-        const response = await axios.post(`${API_URL}/projects/${id}/goals/${goalId}/submit`, { submissionLink, requestingUserId }, getAuthDetails());
+    submitProjectGoal: async (id: string, goalId: string, submissionLink: string, requestingUserId: string, submissionTitle?: string, submissionDescription?: string, submissionKey?: string) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/goals/${goalId}/submit`, { submissionLink, requestingUserId, submissionTitle, submissionDescription, submissionKey }, getAuthDetails());
         return response.data;
     },
-    updateProjectGoal: async (id: string, goalId: string, status: string, requestingUserId: string) => {
-        const response = await axios.patch(`${API_URL}/projects/${id}/goals/${goalId}`, { status, requestingUserId }, getAuthDetails());
+    updateProjectGoal: async (id: string, goalId: string, updateData: { title?: string, description?: string, deadline?: string, status?: string, assignedType?: 'all' | 'specific', assignees?: string[], requestingUserId: string, submissionKey?: string, requirementKey?: string }) => {
+        const response = await axios.patch(`${API_URL}/projects/${id}/goals/${goalId}`, updateData, getAuthDetails());
         return response.data;
     },
     deleteProjectGoal: async (id: string, goalId: string, requestingUserId: string) => {
         const response = await axios.delete(`${API_URL}/projects/${id}/goals/${goalId}`, { params: { requestingUserId }, ...getAuthDetails() });
+        return response.data;
+    },
+    accomplishProjectGoal: async (id: string, goalId: string, requestingUserId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/goals/${goalId}/accomplish`, { requestingUserId }, getAuthDetails());
+        return response.data;
+    },
+    requestMissionPostpone: async (id: string, goalId: string, data: { requestedDate: string, personalNote: string, requestingUserId: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/goals/${goalId}/request-postpone`, data, getAuthDetails());
         return response.data;
     },
     addProjectResource: async (id: string, resourceData: { title: string, description?: string, url: string, addedBy: string, addedByName: string }) => {
@@ -226,6 +241,30 @@ export const api = {
     },
     deleteProjectResource: async (id: string, resourceId: string, requestingUserId: string) => {
         const response = await axios.delete(`${API_URL}/projects/${id}/resources/${resourceId}`, { params: { requestingUserId }, ...getAuthDetails() });
+        return response.data;
+    },
+    reviewProjectGoal: async (id: string, goalId: string, status: 'approved' | 'rejected', requestingUserId: string) => {
+        const response = await axios.patch(`${API_URL}/projects/${id}/goals/${goalId}/review`, { status, requestingUserId }, getAuthDetails());
+        return response.data;
+    },
+    removeProjectMember: async (id: string, memberId: string, requestingUserId: string) => {
+        const response = await axios.delete(`${API_URL}/projects/${id}/members/${memberId}`, { params: { requestingUserId }, ...getAuthDetails() });
+        return response.data;
+    },
+    updateProjectDetails: async (id: string, data: { description?: string, idea?: string, problemStatement?: string, teamName?: string, requestingUserId: string }) => {
+        const response = await axios.patch(`${API_URL}/projects/${id}/details`, data, getAuthDetails());
+        return response.data;
+    },
+    requestJoinProject: async (id: string, data: { userId: string, reason: string, skills?: string, experiences?: string, comments?: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/request-join`, data, getAuthDetails());
+        return response.data;
+    },
+    resolveProjectJoinRequest: async (id: string, requestId: string, data: { status: 'accepted' | 'rejected', requestingUserId: string, rejectionReason?: string, messageId?: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/requests/${requestId}/resolve`, data, getAuthDetails());
+        return response.data;
+    },
+    resolveMissionPostpone: async (id: string, goalId: string, data: { status: 'accepted' | 'rejected', requestingUserId: string, deadline?: string, messageId?: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${id}/goals/${goalId}/resolve-postpone`, data, getAuthDetails());
         return response.data;
     },
 
@@ -304,6 +343,10 @@ export const api = {
         const response = await axios.put(`${API_URL}/notifications/${id}/read`, { userId }, getAuthDetails());
         return response.data;
     },
+    markAllNotificationsRead: async (userId: string, role: string) => {
+        const response = await axios.put(`${API_URL}/notifications/mark-all-read`, { userId, role }, getAuthDetails());
+        return response.data;
+    },
 
     // Polls
     getPolls: async (userId?: string, role?: string, email?: string, clubId?: string, college?: string, status?: string) => {
@@ -346,8 +389,12 @@ export const api = {
     },
 
     // Tasks & Rewards
-    getTasks: async (params?: { userId?: string, email?: string, joinedClubs?: string, status?: string, requestingUserId?: string }) => {
+    getTasks: async (params?: { userId?: string, email?: string, joinedClubs?: string, status?: string, requestingUserId?: string, clubId?: string }) => {
         const response = await axios.get(`${API_URL}/tasks`, { params, ...getAuthDetails() });
+        return response.data;
+    },
+    updateTask: async (id: string, taskData: any) => {
+        const response = await axios.put(`${API_URL}/tasks/${id}`, taskData, getAuthDetails());
         return response.data;
     },
     deleteTask: async (id: string) => {
@@ -376,6 +423,10 @@ export const api = {
         const response = await axios.get(`${API_URL}/challenges/${challengeId}/team/${userId}`, getAuthDetails());
         return response.data;
     },
+    getChallengeTeams: async (challengeId: string) => {
+        const response = await axios.get(`${API_URL}/challenges/${challengeId}/teams`, getAuthDetails());
+        return response.data;
+    },
     createChallengeTeam: async (challengeId: string, userId: string, name: string) => {
         const response = await axios.post(`${API_URL}/challenges/${challengeId}/create-team`, { userId, teamName: name }, getAuthDetails());
         return response.data;
@@ -386,6 +437,10 @@ export const api = {
     },
     removeTeamMember: async (teamId: string, memberId: string, userId: string) => {
         const response = await axios.post(`${API_URL}/challenges/team/${teamId}/remove-member`, { memberId, userId }, getAuthDetails());
+        return response.data;
+    },
+    exitChallengeTeam: async (teamId: string, userId: string) => {
+        const response = await axios.post(`${API_URL}/challenges/exit-team`, { teamId, userId }, getAuthDetails());
         return response.data;
     },
     getChallengeParticipants: async (clubId: string) => {
@@ -443,6 +498,46 @@ export const api = {
     },
     deleteLocation: async (id: string) => {
         const response = await axios.delete(`${API_URL}/locations/${id}`, getAuthDetails());
+        return response.data;
+    },
+
+    // Team Chat
+    getTeamChatMessages: async (teamId: string, userId: string) => {
+        const response = await axios.get(`${API_URL}/team-chat/${teamId}`, { params: { userId }, ...getAuthDetails() });
+        return response.data;
+    },
+    sendTeamChatMessage: async (teamId: string, userId: string, message: string) => {
+        const response = await axios.post(`${API_URL}/team-chat/${teamId}`, { userId, message }, getAuthDetails());
+        return response.data;
+    },
+
+    // FAQs
+    getFAQs: async () => {
+        const response = await axios.get(`${API_URL}/faqs`, getAuthDetails());
+        return response.data;
+    },
+    createFAQCategory: async (data: any) => {
+        const response = await axios.post(`${API_URL}/faqs/categories`, data, getAuthDetails());
+        return response.data;
+    },
+    updateFAQCategory: async (id: string, data: any) => {
+        const response = await axios.put(`${API_URL}/faqs/categories/${id}`, data, getAuthDetails());
+        return response.data;
+    },
+    deleteFAQCategory: async (id: string) => {
+        const response = await axios.delete(`${API_URL}/faqs/categories/${id}`, getAuthDetails());
+        return response.data;
+    },
+    addFAQItem: async (categoryId: string, data: any) => {
+        const response = await axios.post(`${API_URL}/faqs/categories/${categoryId}/items`, data, getAuthDetails());
+        return response.data;
+    },
+    updateFAQItem: async (categoryId: string, itemId: string, data: any) => {
+        const response = await axios.put(`${API_URL}/faqs/categories/${categoryId}/items/${itemId}`, data, getAuthDetails());
+        return response.data;
+    },
+    deleteFAQItem: async (categoryId: string, itemId: string) => {
+        const response = await axios.delete(`${API_URL}/faqs/categories/${categoryId}/items/${itemId}`, getAuthDetails());
         return response.data;
     },
 };

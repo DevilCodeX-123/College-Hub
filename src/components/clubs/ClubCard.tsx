@@ -50,7 +50,7 @@ export function ClubCard({ club }: ClubCardProps) {
             <div className="flex items-center justify-between pt-2">
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Users className="h-4 w-4" />
-                <span>{club.memberCount} members</span>
+                <span>{club.memberCount} {club.memberCount === 1 ? 'member' : 'members'}</span>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>

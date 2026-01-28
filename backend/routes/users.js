@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { requestingUserId } = req.query;
-        const targetUser = await User.findById(req.params.id);
+        const targetUser = await User.findById(req.params.id).populate('joinedClubs');
         if (!targetUser) return res.status(404).json({ message: 'User not found' });
 
         if (requestingUserId) {
@@ -57,10 +57,12 @@ router.put('/:id', async (req, res) => {
 
         const ROLE_HIERARCHY = {
             'owner': 100,
-            'admin': 5,
-            'club_coordinator': 4,
-            'club_head': 3,
-            'core_member': 2,
+            'admin': 10,
+            'co_admin': 9,
+            'club_coordinator': 8,
+            'club_co_coordinator': 7,
+            'club_head': 6,
+            'core_member': 4,
             'student': 1
         };
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,8 +35,22 @@ export function NotificationBell() {
         },
     });
 
+    const markAllReadMutation = useMutation({
+        mutationFn: () => api.markAllNotificationsRead(user!.id, user!.role),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+        },
+    });
+
     const safeNotifications = Array.isArray(notifications) ? notifications : [];
     const unreadCount = safeNotifications.filter((n: any) => n && Array.isArray(n.readBy) && !n.readBy.includes(user?.id)).length;
+
+    // Auto-mark as read when opened
+    useEffect(() => {
+        if (open && unreadCount > 0 && user) {
+            markAllReadMutation.mutate();
+        }
+    }, [open, unreadCount, user]);
 
     const handleMarkRead = (id: string) => {
         if (user) markReadMutation.mutate(id);

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { cn } from '@/lib/utils';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -207,6 +208,7 @@ export function ComprehensiveClubSettingsDialog({
             queryClient.invalidateQueries({ queryKey: ['clubs'] });
             queryClient.invalidateQueries({ queryKey: ['college-clubs'] });
             queryClient.invalidateQueries({ queryKey: ['my-club'] });
+            queryClient.invalidateQueries({ queryKey: ['club', club._id || club.id] });
             toast({ title: 'Club updated successfully!' });
         },
         onError: (error: any) => {
@@ -349,6 +351,7 @@ export function ComprehensiveClubSettingsDialog({
                                         )}
                                     </TabsTrigger>
                                     <TabsTrigger value="tasks" className="flex-1 min-w-[70px] sm:min-w-[100px] text-[9px] sm:text-xs h-8 sm:h-9">Tasks</TabsTrigger>
+                                    <TabsTrigger value="points" className="flex-1 min-w-[70px] sm:min-w-[100px] text-[9px] sm:text-xs h-8 sm:h-9">Points History</TabsTrigger>
                                 </TabsList>
 
                                 {/* Basic Info Tab */}
@@ -401,7 +404,7 @@ export function ComprehensiveClubSettingsDialog({
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="Technical">Technical</SelectItem>
+                                                    <SelectItem value="Technology">Technology</SelectItem>
                                                     <SelectItem value="Cultural">Cultural</SelectItem>
                                                     <SelectItem value="Sports">Sports</SelectItem>
                                                     <SelectItem value="Social">Social</SelectItem>
@@ -530,9 +533,76 @@ export function ComprehensiveClubSettingsDialog({
                                     </div>
                                 </TabsContent>
 
-                                {/* History Tab */}
+                                {/* Events Tab */}
                                 <TabsContent value="history" className="space-y-6">
                                     <ClubEventsManager club={club} />
+                                </TabsContent>
+
+                                {/* Tasks Tab */}
+                                <TabsContent value="tasks" className="space-y-4">
+                                    <ManageClubTasks readOnly={false} clubId={club._id || club.id} />
+                                </TabsContent>
+
+                                {/* Points History Tab */}
+                                <TabsContent value="points" className="space-y-4 pt-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Card className="bg-primary/5 border-primary/10">
+                                            <CardContent className="pt-6">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/60">Total Points</p>
+                                                <p className="text-3xl font-black text-primary mt-1">{club.points || 0}</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="bg-green-50/50 border-green-100">
+                                            <CardContent className="pt-6">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-green-600/60">Monthly Points</p>
+                                                <p className="text-3xl font-black text-green-600 mt-1">{club.monthlyPoints || 0}</p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    <Card className="border-none shadow-none ring-1 ring-slate-100">
+                                        <CardHeader className="flex flex-row items-center justify-between py-4">
+                                            <CardTitle className="text-base font-bold">Transaction History</CardTitle>
+                                            <History className="h-4 w-4 text-muted-foreground" />
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <div className="divide-y divide-slate-100 border-t">
+                                                {(!club.pointsHistory || club.pointsHistory.length === 0) ? (
+                                                    <div className="p-12 text-center text-slate-400 italic text-sm">
+                                                        No point transactions recorded yet.
+                                                    </div>
+                                                ) : (
+                                                    [...club.pointsHistory].reverse().map((item: any, idx) => (
+                                                        <div key={idx} className="p-4 flex items-start justify-between hover:bg-slate-50 transition-colors">
+                                                            <div className="flex gap-3">
+                                                                <div className={cn(
+                                                                    "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
+                                                                    item.amount > 0 ? "bg-green-100 text-green-600" : "bg-rose-100 text-rose-600"
+                                                                )}>
+                                                                    {item.amount > 0 ? <Plus className="h-3 w-3" /> : <Trash2 className="h-3 w-3" />}
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-xs font-bold text-slate-700">{item.reason}</p>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <Badge variant="outline" className="text-[8px] h-3.5 px-1 font-black uppercase tracking-tighter">
+                                                                            {item.sourceType}
+                                                                        </Badge>
+                                                                        <span className="text-[9px] text-slate-400">{new Date(item.timestamp).toLocaleString()}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className={cn(
+                                                                "text-xs font-black",
+                                                                item.amount > 0 ? "text-green-600" : "text-rose-600"
+                                                            )}>
+                                                                {item.amount > 0 ? '+' : ''}{item.amount} PTS
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
                                 </TabsContent>
 
                                 {/* Coordinator & Team Tab */}

@@ -25,7 +25,11 @@ import {
   Mail,
   Building,
   Lock,
-  GraduationCap
+  GraduationCap,
+  Plus,
+  ShieldCheck,
+  X,
+  CheckCircle2
 } from 'lucide-react';
 import { UserRole } from '@/types';
 import { Link } from 'react-router-dom';
@@ -35,6 +39,7 @@ import { api } from '@/lib/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -57,6 +62,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState('goals');
   const [openEdit, setOpenEdit] = useState(false);
   const [openGoals, setOpenGoals] = useState(false);
+  const [openSkills, setOpenSkills] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
 
@@ -86,15 +92,38 @@ export default function Profile() {
         name: user.name || '',
         college: user.college || '',
         avatar: user.avatar || '',
-        primaryGoal: user.primaryGoal || 'Software Engineer',
-        secondaryGoal: user.secondaryGoal || 'Tech Entrepreneur',
-        skills: user.skills?.join(', ') || 'Web Development, Problem Solving, Leadership',
+        primaryGoal: user.primaryGoal || '',
+        secondaryGoal: user.secondaryGoal || '',
+        skills: user.skills?.join(', ') || '',
         branch: user.branch || '',
         year: user.year || '',
         customTitle: user.customTitle || ''
       });
+      setEditSkills(user.skills || []);
     }
   }, [user]);
+
+  const [editSkills, setEditSkills] = useState<string[]>([]);
+  const [newSkillInput, setNewSkillInput] = useState('');
+
+  const addSkill = () => {
+    if (editSkills.length >= 5) {
+      toast({
+        title: "Skill Limit Reached",
+        description: "You can only list up to 5 technical skills to keep your profile focused.",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (newSkillInput.trim() && !editSkills.includes(newSkillInput.trim())) {
+      setEditSkills([...editSkills, newSkillInput.trim()]);
+      setNewSkillInput('');
+    }
+  };
+
+  const removeSkill = (skillToRemove: string) => {
+    setEditSkills(editSkills.filter(s => s !== skillToRemove));
+  };
 
   const { data: colleges = [] } = useQuery({
     queryKey: ['colleges'],
@@ -117,6 +146,7 @@ export default function Profile() {
       toast({ title: 'Profile updated successfully' });
       setOpenEdit(false);
       setOpenGoals(false);
+      setOpenSkills(false);
     },
     onError: () => {
       toast({ title: 'Failed to update profile', variant: 'destructive' });
@@ -146,6 +176,11 @@ export default function Profile() {
     updateProfileMutation.mutate(formData);
   };
 
+  const handleUpdateSkills = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateProfileMutation.mutate({ ...formData, skills: editSkills.join(', ') });
+  };
+
   const handlePasswordUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordData.newPassword !== passwordData.confirmPassword) {
@@ -162,80 +197,108 @@ export default function Profile() {
     });
   };
 
-  const { data: clubs = [] } = useQuery({
-    queryKey: ['clubs'],
-    queryFn: () => api.getClubs(user?.college, user?.id || user?._id),
-  });
-
   // Fetch fresh user data to keep XP updated
-  const { data: freshUserData } = useQuery({
+  const { data: freshUserData, isLoading: isLoadingProfile } = useQuery({
     queryKey: ['user-profile', user?.id],
     queryFn: () => api.getProfile(user?.id || '', user?.id || user?._id),
     enabled: !!user?.id,
     refetchInterval: 5000, // Refetch every 5 seconds
   });
 
+  // Unified data source to ensure immediate updates
+  const profileData = freshUserData || user;
+
+  const { data: clubs = [] } = useQuery({
+    queryKey: ['clubs', profileData?.college],
+    queryFn: () => api.getClubs(profileData?.college, profileData?.id || profileData?._id),
+    enabled: !!profileData?.college
+  });
+
+  // Loading barrier - if no data yet, show centered loader
+  if (!profileData && isLoadingProfile) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="text-sm font-black text-slate-400 uppercase tracking-widest animate-pulse">Synchronizing Profile...</p>
+        </div>
+      </Layout>
+    );
+  }
+
   useEffect(() => {
     if (freshUserData) {
-      const hasChanged = freshUserData.points !== user?.points ||
-        freshUserData.level !== user?.level ||
-        freshUserData.weeklyXP !== user?.weeklyXP ||
-        freshUserData.badges?.length !== user?.badges?.length;
-
+      const hasChanged = JSON.stringify(freshUserData) !== JSON.stringify(user);
       if (hasChanged) {
         updateUser(freshUserData);
       }
     }
-  }, [freshUserData, updateUser]); // Removed user from deps to avoid loop
+  }, [freshUserData, updateUser, user]);
 
   // Ensure joinedClubs is an array before filtering
-  const safeJoinedClubs = Array.isArray(user?.joinedClubs) ? user.joinedClubs : [];
-  const joinedClubs = clubs.filter(c => safeJoinedClubs.includes(c.id || (c as any)._id));
+  const safeJoinedClubs = Array.isArray(profileData?.joinedClubs) ? profileData.joinedClubs : [];
+  const joinedClubIds = new Set(safeJoinedClubs.map((c: any) => typeof c === 'string' ? c : (c.id || c._id)));
+  const joinedClubs = clubs.filter(c => joinedClubIds.has(c.id || (c as any)._id));
 
   return (
     <Layout>
       <div className="space-y-6 animate-fade-in">
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-3xl font-black tracking-tight text-slate-900 italic">User Dossier</h2>
+          {isLoadingProfile && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+        </div>
         {/* Profile Header */}
-        <Card variant="gradient" className="overflow-hidden">
-          <div className="h-24 gradient-primary" />
-          <CardContent className="-mt-12 relative">
-            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
-              <Avatar className="h-24 w-24 border-4 border-card shadow-lg">
-                <AvatarImage src={user?.avatar} />
-                <AvatarFallback className="text-2xl font-bold bg-primary text-primary-foreground">
-                  {user?.name?.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
+        <Card variant="gradient" className="overflow-hidden shadow-2xl border-none">
+          <div className="h-32 bg-gradient-to-r from-primary via-accent to-primary animate-gradient-slow shadow-inner" />
+          <CardContent className="-mt-16 relative px-6 pb-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6">
+              <div className="relative group">
+                <Avatar className="h-32 w-32 border-8 border-card shadow-2xl group-hover:scale-105 transition-transform duration-500">
+                  <AvatarImage src={profileData?.avatar} />
+                  <AvatarFallback className="text-4xl font-black bg-primary text-primary-foreground italic">
+                    {profileData?.name?.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping opacity-20 pointer-events-none" />
+              </div>
 
-              <div className="flex-1">
+              <div className="flex-1 pb-2">
                 <div className="flex flex-col gap-1">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                    <h1 className="text-2xl font-bold">{user?.name}</h1>
-                    <Badge variant="secondary">{roleLabels[user?.role || 'student']}</Badge>
+                    <h1 className="text-4xl font-black tracking-tighter text-slate-900">{profileData?.name}</h1>
+                    <Badge className={cn(
+                      "font-black px-3 py-1 uppercase text-xs",
+                      profileData?.role === 'owner' ? "bg-slate-900 text-white border-slate-800 shadow-lg" : "bg-primary/10 text-primary border-primary/20"
+                    )}>
+                      {roleLabels[profileData?.role || 'student']}
+                    </Badge>
                   </div>
-                  {user?.customTitle && (
-                    <p className="text-sm font-semibold text-primary/80 italic">
-                      {user.customTitle}
-                    </p>
+                  {profileData?.customTitle && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <ShieldCheck className="h-4 w-4 text-primary" />
+                      <p className="text-base font-black text-primary italic tracking-tight">
+                        {profileData.customTitle}
+                      </p>
+                    </div>
                   )}
                 </div>
-                <p className="text-muted-foreground mt-1">{user?.email}</p>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-muted-foreground">
-                  <p className="flex items-center gap-1.5"><Building className="h-3.5 w-3.5" />{user?.college}</p>
-                  {user?.branch && <p className="flex items-center gap-1.5"><GraduationCap className="h-3.5 w-3.5" />{user.branch}</p>}
-                  {user?.year && <p className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{user.year} Year</p>}
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3 text-sm font-bold text-slate-600">
+                  <p className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded ring-1 ring-slate-200"><Mail className="h-3.5 w-3.5" />{profileData?.email}</p>
+                  <p className="flex items-center gap-1.5 border-b-2 border-primary/30 pb-0.5"><Building className="h-3.5 w-3.5" />{profileData?.college}</p>
+                  {profileData?.branch && <p className="flex items-center gap-1.5"><GraduationCap className="h-3.5 w-3.5" />{profileData.branch}</p>}
+                  {profileData?.year && <p className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{profileData.year} Year</p>}
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 pb-2">
                 {/* Edit Profile Dialog */}
                 <Dialog open={openEdit} onOpenChange={(open) => {
                   setOpenEdit(open);
                   if (!open) setShowPasswordChange(false);
                 }}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <Edit className="h-4 w-4" />
+                    <Button variant="outline" size="lg" className="font-black border-2 hover:bg-slate-50 shadow-md">
+                      <Edit className="h-4 w-4 mr-2" /> EDIT PROFILE
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-md">
@@ -472,18 +535,18 @@ export default function Profile() {
             onClick={() => setActiveTab('badges')}
             className="block cursor-pointer"
           >
-            <Card className="text-center p-4 hover:shadow-md hover:border-gold/50 transition-all group">
+            <Card className="text-center p-4 hover:shadow-xl hover:border-gold/50 transition-all group ring-1 ring-gold/10">
               <div className="h-10 w-10 rounded-full bg-gold/10 flex items-center justify-center mx-auto mb-2 group-hover:bg-gold/20 transition-colors">
                 <Award className="h-5 w-5 text-gold" />
               </div>
-              <p className="text-2xl font-bold group-hover:text-gold transition-colors">
-                {(user?.badges?.length || 0) + [
+              <p className="text-3xl font-black group-hover:text-gold transition-colors italic">
+                {(profileData?.badges?.length || 0) + [
                   { name: 'Early Adopter', icon: '🚀', locked: false },
                   { name: 'First Challenge', icon: '🏆', locked: false },
-                  { name: 'Team Player', icon: '🤝', locked: (user?.joinedClubs?.length || 0) < 1 },
-                ].filter(sb => !user?.badges?.some((ub: any) => ub.name === sb.name)).filter(b => !b.locked).length}
+                  { name: 'Team Player', icon: '🤝', locked: (profileData?.joinedClubs?.length || 0) < 1 },
+                ].filter(sb => !profileData?.badges?.some((ub: any) => ub.name === sb.name)).filter(b => !b.locked).length}
               </p>
-              <p className="text-sm text-muted-foreground">Badges</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Badges</p>
             </Card>
           </div>
         </div>
@@ -533,7 +596,7 @@ export default function Profile() {
                       <DialogFooter>
                         <Button type="submit" disabled={updateProfileMutation.isPending} className="w-full">
                           {updateProfileMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Update Hub
+                          Update Goals
                         </Button>
                       </DialogFooter>
                     </form>
@@ -546,7 +609,7 @@ export default function Profile() {
                     <Target className="h-6 w-6 text-primary-foreground" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold leading-tight">{user?.primaryGoal || 'Software Engineer'}</h3>
+                    <h3 className="text-lg font-bold leading-tight">{user?.primaryGoal || 'No goal set'}</h3>
                     <p className="text-xs text-muted-foreground font-semibold uppercase tracking-widest mt-0.5">Primary Target</p>
                   </div>
                 </div>
@@ -555,7 +618,7 @@ export default function Profile() {
                     <Target className="h-6 w-6 text-accent" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold leading-tight">{user?.secondaryGoal || 'Tech Entrepreneur'}</h3>
+                    <h3 className="text-lg font-bold leading-tight">{user?.secondaryGoal || 'No goal set'}</h3>
                     <p className="text-xs text-muted-foreground font-semibold uppercase tracking-widest mt-0.5">Secondary Target</p>
                   </div>
                 </div>
@@ -563,51 +626,183 @@ export default function Profile() {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-base">Technical Skills</CardTitle>
+                <Dialog open={openSkills} onOpenChange={setOpenSkills}>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="sm">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Update Technical Skills</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6 py-4">
+                      {/* Interactive Skill Addition */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between ml-1">
+                          <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Add New Skill</Label>
+                          <span className={cn("text-[10px] font-black uppercase", editSkills.length >= 5 ? "text-rose-500" : "text-primary")}>
+                            {editSkills.length} / 5
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder={editSkills.length >= 5 ? "Limit reached" : "e.g. React, Docker, UI Design"}
+                            value={newSkillInput}
+                            disabled={editSkills.length >= 5}
+                            onChange={(e) => setNewSkillInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && addSkill()}
+                            className="h-11 rounded-xl border-2 focus-visible:ring-primary shadow-sm"
+                          />
+                          <Button onClick={addSkill} size="icon" className="h-11 w-11 shrink-0 rounded-xl" disabled={editSkills.length >= 5}>
+                            <Plus className="h-5 w-5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Current Skills List */}
+                      <div className="space-y-3">
+                        <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Current Skill Set ({editSkills.length})</Label>
+                        <div className="flex flex-wrap gap-2 p-4 bg-secondary/20 rounded-2xl border-2 border-dashed min-h-[100px]">
+                          {editSkills.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center w-full min-h-[60px] text-muted-foreground italic text-xs">
+                              No skills added yet. Start adding above!
+                            </div>
+                          ) : (
+                            editSkills.map((skill) => (
+                              <Badge
+                                key={skill}
+                                variant="secondary"
+                                className="pl-3 pr-1 py-1.5 h-8 flex items-center gap-1.5 rounded-lg bg-white border-2 border-primary/20 text-primary font-bold transition-all hover:border-primary/50 group"
+                              >
+                                {skill}
+                                <button
+                                  onClick={() => removeSkill(skill)}
+                                  className="h-5 w-5 flex items-center justify-center rounded-md hover:bg-rose-100 hover:text-rose-600 transition-colors"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <Button
+                        onClick={handleUpdateSkills}
+                        disabled={updateProfileMutation.isPending}
+                        className="w-full h-12 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-primary/20 transition-all hover:scale-[1.02]"
+                      >
+                        {updateProfileMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Save Skill Set
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {(user?.skills || ['Web Development', 'Problem Solving', 'Leadership']).map((skill: string) => (
-                    <Badge key={skill} variant="secondary" className="px-3 py-1 text-sm bg-secondary/50 border-none font-medium text-secondary-foreground">
-                      {skill}
-                    </Badge>
-                  ))}
+                  {(!user?.skills || user.skills.length === 0) ? (
+                    <p className="text-sm text-muted-foreground italic">No technical skills added yet.</p>
+                  ) : (
+                    user.skills.map((skill: string) => (
+                      <Badge key={skill} variant="secondary" className="px-3 py-1 text-sm bg-secondary/50 border-none font-medium text-secondary-foreground">
+                        {skill}
+                      </Badge>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="challenges" className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              {user?.activity?.filter(a => a.type === 'challenge').length === 0 ? (
-                <div className="md:col-span-2 text-center py-12 px-4 bg-secondary/20 rounded-2xl border-2 border-dashed">
-                  <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-20" />
-                  <p className="font-bold text-muted-foreground">No Challenges Accepted Yet</p>
-                  <Link to="/challenges">
-                    <Button variant="link" className="text-primary mt-2">Browse available challenges</Button>
-                  </Link>
+          <TabsContent value="challenges" className="space-y-6">
+            {profileData?.activity?.filter(a => a.type === 'challenge').length === 0 ? (
+              <div className="text-center py-12 px-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                <Trophy className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                <h3 className="text-xl font-black text-slate-400 uppercase tracking-tighter">Zero Deployments</h3>
+                <p className="text-slate-400 mt-1 font-bold">Initiate contact with challenges to broaden your skills.</p>
+                <Link to="/challenges">
+                  <Button variant="link" className="text-primary mt-4 font-black italic">SEARCH FOR ACTIVE MISSIONS →</Button>
+                </Link>
+              </div>
+            ) : (
+              <>
+                {/* Active Challenges */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 border-l-4 border-primary pl-4">
+                    <Trophy className="h-6 w-6 text-primary" />
+                    <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900">
+                      Active Ops ({profileData?.activity?.filter(a => a.type === 'challenge' && a.status !== 'completed').length || 0})
+                    </h3>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {profileData?.activity?.filter(a => a.type === 'challenge' && a.status !== 'completed').length === 0 ? (
+                      <p className="md:col-span-2 text-sm font-bold text-slate-400 italic text-center py-6 bg-slate-50 rounded-xl">No active field missions found.</p>
+                    ) : (
+                      profileData?.activity?.filter(a => a.type === 'challenge' && a.status !== 'completed').map((item, idx) => (
+                        <Card key={idx} className="overflow-hidden border-2 border-primary/20 shadow-lg hover:shadow-primary/5 hover:border-primary/40 transition-all group flex flex-col">
+                          <CardHeader className="bg-primary/5 flex flex-row items-center justify-between py-4">
+                            <h4 className="font-black text-lg text-primary tracking-tight">{item.title}</h4>
+                            <Badge className="bg-primary/20 text-primary border-primary/30 font-black italic">IN PROGRESS</Badge>
+                          </CardHeader>
+                          <CardContent className="pt-4 flex-1 flex flex-col justify-between">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">DEPLOYED ON: {new Date(item.timestamp).toLocaleDateString()}</p>
+                            <div className="flex justify-between items-center mt-auto border-t pt-4">
+                              <span className="flex items-center gap-1.5 text-xs font-black text-slate-600">
+                                <Zap className="h-3.5 w-3.5 text-primary" /> STATUS: ACTIVE
+                              </span>
+                              <Link to="/challenges">
+                                <Button size="sm" className="bg-primary font-black italic px-4">OPEN MISSION</Button>
+                              </Link>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
                 </div>
-              ) : (
-                user?.activity?.filter(a => a.type === 'challenge').map((item, idx) => (
-                  <Card key={idx} className="overflow-hidden border-primary/20 hover:border-primary/50 transition-all group">
-                    <CardHeader className="bg-primary/5 flex flex-row items-center justify-between pb-2">
-                      <h4 className="font-bold text-primary">{item.title}</h4>
-                      <Badge variant="outline" className="text-[10px] uppercase">{item.status || 'Active'}</Badge>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-muted-foreground font-mono">Accepted on: {new Date(item.timestamp).toLocaleDateString()}</p>
-                      <div className="mt-4 flex justify-between items-center">
-                        <p className="text-sm font-bold flex items-center gap-1">
-                          <Zap className="h-3 w-3 text-xp" /> Potential 500 XP
-                        </p>
-                        <Button size="sm" variant="outline" className="text-xs h-7 px-2">View Task</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
+
+                {/* Completed Challenges */}
+                <div className="space-y-4 pt-4">
+                  <div className="flex items-center gap-3 border-l-4 border-green-600 pl-4">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                    <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900">
+                      Archived Success ({profileData?.activity?.filter(a => a.type === 'challenge' && a.status === 'completed').length || 0})
+                    </h3>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {profileData?.activity?.filter(a => a.type === 'challenge' && a.status === 'completed').length === 0 ? (
+                      <p className="md:col-span-2 text-sm font-bold text-slate-400 italic text-center py-6 bg-slate-50 rounded-xl">No achievement records found.</p>
+                    ) : (
+                      profileData?.activity?.filter(a => a.type === 'challenge' && a.status === 'completed').map((item, idx) => (
+                        <Card key={idx} className="overflow-hidden border-2 border-green-200 bg-green-50/20 shadow-md hover:border-green-300 transition-all group flex flex-col">
+                          <CardHeader className="bg-green-100/50 flex flex-row items-center justify-between py-4">
+                            <h4 className="font-black text-lg text-green-700 tracking-tight">{item.title}</h4>
+                            <Badge className="bg-green-600 text-white font-black italic border-none shadow-sm shadow-green-200">ARCHIVED</Badge>
+                          </CardHeader>
+                          <CardContent className="pt-4 flex-1 flex flex-col justify-between">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">RESOLVED: {new Date(item.timestamp).toLocaleDateString()}</p>
+                            <div className="flex justify-between items-center mt-auto border-t pt-4">
+                              <span className="flex items-center gap-1.5 text-xs font-black text-green-600">
+                                <Award className="h-3.5 w-3.5" /> STATUS: CLEAR
+                              </span>
+                              <Link to="/challenges">
+                                <Button size="sm" variant="outline" className="border-green-600 text-green-700 font-black italic hover:bg-green-50">VIEW REBORN</Button>
+                              </Link>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="clubs">
@@ -643,42 +838,52 @@ export default function Profile() {
           </TabsContent>
 
           <TabsContent value="activity">
-            <Card>
-              <CardContent className="py-6">
-                {!user?.activity || user.activity.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-muted-foreground">No recent activity found. Jump into some challenges!</p>
+            <Card className="border-2 shadow-xl">
+              <CardContent className="py-8 px-6">
+                {!profileData?.activity || profileData.activity.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                    <Calendar className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                    <h3 className="text-xl font-black text-slate-400 uppercase tracking-tighter">Timeline Inactive</h3>
+                    <p className="text-slate-400 font-bold">Your operational history is currently empty.</p>
                   </div>
                 ) : (
-                  <div className="relative space-y-6 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-primary/50 before:via-secondary before:to-transparent">
-                    {[...user.activity].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((item, idx) => (
-                      <div key={idx} className="relative flex items-center gap-6 group">
+                  <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-1 before:bg-gradient-to-b before:from-primary/80 before:via-slate-200 before:to-transparent">
+                    {[...profileData.activity].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((item, idx) => (
+                      <div key={idx} className="relative flex items-start gap-8 group">
                         {/* Icon/Dot */}
                         <div className={cn(
-                          "relative z-10 flex items-center justify-center h-10 w-10 rounded-full border-4 border-card shadow-sm transition-transform group-hover:scale-110",
-                          item.type === 'challenge' ? 'bg-primary text-primary-foreground' :
-                            item.type === 'project' ? 'bg-accent text-accent-foreground' :
-                              'bg-secondary text-secondary-foreground'
+                          "relative z-10 flex items-center justify-center h-11 w-11 rounded-full border-4 border-card shadow-lg transition-all group-hover:scale-125 group-hover:shadow-primary/20",
+                          item.type === 'challenge' ? 'bg-indigo-600 text-white' :
+                            item.type === 'project' ? 'bg-orange-500 text-white' :
+                              item.type === 'event' ? 'bg-pink-500 text-white' :
+                                item.type === 'club' ? 'bg-blue-600 text-white' :
+                                  'bg-slate-800 text-white'
                         )}>
-                          {item.type === 'challenge' && <Trophy className="h-4 w-4" />}
-                          {item.type === 'project' && <Users className="h-4 w-4" />}
-                          {item.type === 'event' && <Calendar className="h-4 w-4" />}
-                          {item.type === 'club' && <Building className="h-4 w-4" />}
+                          {item.type === 'challenge' && <Trophy className="h-5 w-5" />}
+                          {item.type === 'project' && <Users className="h-5 w-5" />}
+                          {item.type === 'event' && <Calendar className="h-5 w-5" />}
+                          {item.type === 'club' && <ShieldCheck className="h-5 w-5" />}
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 p-4 rounded-xl bg-secondary/20 border border-border/50 transition-all hover:bg-secondary/30">
-                          <div className="flex justify-between items-start mb-1">
-                            <h4 className="font-bold text-base">{item.title}</h4>
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded">
-                              {new Date(item.timestamp).toLocaleDateString()}
+                        <div className="flex-1 p-5 rounded-2xl bg-slate-50 border-2 border-slate-200/50 transition-all group-hover:border-primary/30 group-hover:bg-white group-hover:shadow-xl">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
+                            <h4 className="font-black text-lg text-slate-900 tracking-tight">{item.title}</h4>
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white bg-slate-900 px-3 py-1 rounded-full shadow-sm">
+                              {new Date(item.timestamp).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
                             </span>
                           </div>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1.5 capitalize">
-                            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                            {item.status || 'Engaged'}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <Badge className={cn(
+                              "px-2 py-0.5 font-black italic text-[9px] border-none shadow-sm",
+                              item.status === 'completed' ? 'bg-green-600 text-white' : 'bg-primary text-white'
+                            )}>
+                              {item.status?.toUpperCase() || 'ENGAGED'}
+                            </Badge>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded">
+                              TYPE: {item.type?.toUpperCase()}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -689,32 +894,85 @@ export default function Profile() {
           </TabsContent>
 
           <TabsContent value="badges">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
               {/* Actual Badges from Database */}
-              {user?.badges?.map((badge: any, idx: number) => (
-                <div key={idx} className="block hover:scale-[1.02] transition-transform">
-                  <Card className="text-center p-4 hover:shadow-md transition-all relative border-gold/20 hover:border-gold/50 bg-gold/5">
-                    <div className="text-4xl mb-2">{badge.icon || '🏅'}</div>
-                    <p className="text-sm font-bold text-gold-foreground">{badge.name}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{badge.description}</p>
+              {profileData?.badges?.map((badge: any, idx: number) => (
+                <div key={idx} className="block hover:scale-[1.05] transition-all duration-300">
+                  <Card className="flex flex-col items-center justify-center p-6 bg-white shadow-2xl hover:shadow-primary/10 transition-all relative border-2 border-slate-100 hover:border-primary/30 ring-1 ring-slate-100 group min-h-[220px] text-center overflow-hidden rounded-3xl">
+                    {/* Top Layer: Competition/Challenge Name */}
+                    <div className="absolute top-4 w-full px-4 text-center">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/60 line-clamp-1 italic">
+                        {badge.challengeName || "Dossier Honors"}
+                      </p>
+                    </div>
+
+                    {/* Icon (Supporting) */}
+                    <div className="text-4xl mt-6 mb-2 filter drop-shadow-xl group-hover:rotate-12 transition-all duration-500 opacity-80 group-hover:opacity-100 group-hover:scale-110">
+                      {(badge.name?.toLowerCase().includes('grandmaster') || (badge.name?.toLowerCase().includes('award') && badge.description?.toLowerCase().includes('grandmaster'))) ? '👑' :
+                        (badge.icon === 'award' || !badge.icon) ? '🥇' : badge.icon}
+                    </div>
+
+                    {/* Central Hero: Award Name (Grandmaster, etc.) - PROMINENT DISPLAY */}
+                    <div className="py-2">
+                      <h3 className="text-3xl font-black text-slate-900 leading-none tracking-tighter group-hover:text-primary transition-all duration-300 italic drop-shadow-sm">
+                        {badge.name === 'award' ? (badge.description || badge.name) : badge.name}
+                      </h3>
+                    </div>
+
+                    {/* Footer: Club Name Signature */}
+                    <div className="mt-3 flex flex-col items-center gap-1">
+                      <div className="flex items-center justify-center gap-1.5 bg-slate-900 px-4 py-1.5 rounded-full border border-slate-800 shadow-lg group-hover:bg-primary transition-all duration-300">
+                        <ShieldCheck className="h-3.5 w-3.5 text-white" />
+                        <span className="text-[11px] font-extrabold text-white uppercase tracking-widest leading-none">
+                          {badge.clubName?.toUpperCase() || "OFFICIAL REGISTRY"}
+                        </span>
+                      </div>
+                      {badge.challengeName && (
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mt-1">
+                          via {badge.challengeName}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Decorative Bottom Glow */}
+                    <div className="absolute bottom-0 h-1.5 w-full bg-gradient-to-r from-transparent via-primary to-transparent opacity-20" />
                   </Card>
                 </div>
               ))}
 
-              {/* System/Standard Badges */}
+              {/* System Achievements with Shared Premium Aesthetic */}
               {[
-                { name: 'Early Adopter', icon: '🚀', locked: false },
-                { name: 'First Challenge', icon: '🏆', locked: false },
-                { name: 'Team Player', icon: '🤝', locked: joinedClubs.length < 1 },
+                { name: 'Early Adopter', icon: '🚀', description: 'Hub pioneer' },
+                { name: 'First Challenge', icon: '🏆', description: 'Accepted mission' },
+                { name: 'Team Player', icon: '🤝', description: 'Joined a club', locked: (profileData?.joinedClubs?.length || 0) < 1 },
               ]
-                .filter(sb => !user?.badges?.some((ub: any) => ub.name === sb.name))
+                .filter(sb => !profileData?.badges?.some((ub: any) => ub.name === sb.name))
                 .filter(badge => !badge.locked)
                 .map((badge) => (
-                  <div key={badge.name} className="block opacity-80 hover:opacity-100 transition-opacity">
-                    <Card className="text-center p-4 hover:shadow-md transition-all relative">
-                      <div className="text-4xl mb-2 grayscale-[0.5]">{badge.icon}</div>
-                      <p className="text-sm font-medium">{badge.name}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">System Achievement</p>
+                  <div key={badge.name} className="block opacity-90 hover:opacity-100 hover:scale-[1.05] transition-all duration-300">
+                    <Card className="flex flex-col items-center justify-center p-6 bg-slate-50 shadow-xl hover:shadow-2xl transition-all relative border-2 border-slate-200 hover:border-primary/50 ring-1 ring-slate-100 group min-h-[220px] text-center overflow-hidden rounded-3xl">
+                      <div className="absolute top-5 w-full px-4 text-center">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 italic">
+                          System Protocol
+                        </p>
+                      </div>
+
+                      <div className="text-4xl mt-6 mb-3 grayscale-[0.5] group-hover:grayscale-0 group-hover:scale-110 transition-all duration-500 drop-shadow-md">
+                        {badge.icon}
+                      </div>
+
+                      <div className="space-y-2">
+                        <h3 className="text-xl font-black text-slate-900 leading-tight tracking-tighter group-hover:text-primary transition-colors uppercase italic">
+                          {badge.name}
+                        </h3>
+                        <div className="flex items-center justify-center gap-1.5 mt-2 bg-white px-3 py-1.5 rounded-full border-2 border-slate-200 group-hover:border-primary/20 shadow-sm transition-all hover:bg-slate-50">
+                          <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest leading-none">
+                            CAMPUS HUB | SYSTEM
+                          </span>
+                        </div>
+                      </div>
+                      <div className="absolute bottom-0 h-1.5 w-full bg-gradient-to-r from-transparent via-slate-300 to-transparent opacity-10" />
                     </Card>
                   </div>
                 ))}

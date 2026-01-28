@@ -34,11 +34,28 @@ export default function Login() {
         setError('');
         setLoading(true);
 
+        // Proper Fix: Auto-correct common email typos
+        let fixedEmail = email.trim().toLowerCase();
+        if (fixedEmail.includes('@gamil.com')) fixedEmail = fixedEmail.replace('@gamil.com', '@gmail.com');
+        if (fixedEmail.includes('@gmailcom')) fixedEmail = fixedEmail.replace('@gmailcom', '@gmail.com');
+        if (fixedEmail.includes('@yahoocom')) fixedEmail = fixedEmail.replace('@yahoocom', '@yahoo.com');
+        if (fixedEmail.includes('@outlookcom')) fixedEmail = fixedEmail.replace('@outlookcom', '@outlook.com');
+        if (fixedEmail.includes('@hotmailcom')) fixedEmail = fixedEmail.replace('@hotmailcom', '@hotmail.com');
+
+        // Final sanity check: if it ends with 'com' but missing the dot
+        if (fixedEmail.endsWith('com') && !fixedEmail.endsWith('.com')) {
+            fixedEmail = fixedEmail.replace(/com$/, '.com');
+        }
+
         try {
-            await login(email, password);
+            await login(fixedEmail, password);
             navigate('/');
         } catch (err: any) {
             setError(err.response?.data?.message || 'Failed to login');
+            // If it failed and we fixed a typo, show the fixed email to help them notice
+            if (fixedEmail !== email.trim().toLowerCase()) {
+                setError(`Login failed. We tried fixing a typo to "${fixedEmail}" but it was still rejected.`);
+            }
         } finally {
             setLoading(false);
         }

@@ -108,7 +108,7 @@ export function EditClubDialog({ open, onClose, club, collegeUsers }: EditClubDi
                                 <SelectValue placeholder="Select Category" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="Technical">Technical</SelectItem>
+                                <SelectItem value="Technology">Technology</SelectItem>
                                 <SelectItem value="Cultural">Cultural</SelectItem>
                                 <SelectItem value="Sports">Sports</SelectItem>
                                 <SelectItem value="Literary">Literary</SelectItem>

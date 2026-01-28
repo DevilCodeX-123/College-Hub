@@ -138,7 +138,22 @@ export default function Leaderboard() {
                           <p className="text-2xl font-bold text-primary mt-1">
                             {entry.points?.toLocaleString() || 0}
                           </p>
-                          <p className="text-xs text-muted-foreground">XP</p>
+                          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest leading-none">Weekly XP</p>
+
+                          <div className="mt-4 pt-4 border-t border-muted w-full space-y-2">
+                            <p className="text-[10px] font-black uppercase text-slate-500">
+                              {entry.branch || 'Academic Hub'} • {entry.year || 'N/A'} Year
+                            </p>
+                            {entry.skills?.length > 0 && (
+                              <div className="flex flex-wrap justify-center gap-1">
+                                {entry.skills.slice(0, 2).map((skill: string) => (
+                                  <Badge key={skill} variant="outline" className="text-[8px] font-bold px-1.5 py-0 h-4 bg-white/50">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </Card>
                       </div>
                     );
@@ -190,9 +205,23 @@ export default function Leaderboard() {
                               <Badge variant="secondary" className="shrink-0 scale-75 origin-left">You</Badge>
                             )}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {entry.college || 'N/A'}
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight flex items-center gap-1.5">
+                            {entry.branch || 'Branch'} • {entry.year || 'N/A'} Year
                           </p>
+                          {entry.skills?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {entry.skills.slice(0, 3).map((skill: string) => (
+                                <span key={skill} className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-primary/5 text-primary border border-primary/10">
+                                  {skill}
+                                </span>
+                              ))}
+                              {entry.skills.length > 3 && (
+                                <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">
+                                  +{entry.skills.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <span className="text-lg font-bold text-primary">
                           {entry.points?.toLocaleString() || 0}

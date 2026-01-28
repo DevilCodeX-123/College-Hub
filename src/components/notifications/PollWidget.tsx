@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { isValid } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +10,43 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, BarChart2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { Clock } from 'lucide-react';
+
+function PollCountdown({ expiresAt }: { expiresAt: string }) {
+    const [timeLeft, setTimeLeft] = useState<string>('');
+
+    useEffect(() => {
+        const updateTimer = () => {
+            const now = new Date().getTime();
+            const expiry = new Date(expiresAt).getTime();
+            const diff = expiry - now;
+
+            if (diff <= 0) {
+                setTimeLeft('Expired');
+                return;
+            }
+
+            const h = Math.floor(diff / (1000 * 60 * 60));
+            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+            setTimeLeft(`${h}h ${m}s remaining`);
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, [expiresAt]);
+
+    if (!timeLeft || timeLeft === 'Expired') return null;
+
+    return (
+        <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full animate-pulse">
+            <Clock className="h-3 w-3" />
+            {timeLeft}
+        </div>
+    );
+}
 
 export function PollWidget() {
     const { user } = useAuth();
@@ -45,10 +83,13 @@ export function PollWidget() {
         }
     });
 
-    // Find the latest active poll (voted or not)
-    const activePoll = (Array.isArray(polls) ? polls : []).find((p: any) =>
-        p && p.status === 'active' && !dismissedPolls.includes(p._id)
-    );
+    // Find the latest active poll (voted or not, not expired)
+    const activePoll = (Array.isArray(polls) ? polls : []).find((p: any) => {
+        if (!p || p.status !== 'active' || !p._id || dismissedPolls.includes(p._id)) return false;
+        if (p.expiresAt && !isValid(new Date(p.expiresAt))) return false;
+        if (p.expiresAt && new Date() >= new Date(p.expiresAt)) return false;
+        return true;
+    });
 
     const hasVoted = !!activePoll?.votedBy?.includes(user?.id);
 
@@ -95,7 +136,7 @@ export function PollWidget() {
     if (isLoading || !activePoll) return null;
 
     // Calculate total votes for percentage
-    const totalVotes = activePoll.options.reduce((sum: number, opt: any) => sum + (opt.votes || 0), 0);
+    const totalVotes = Array.isArray(activePoll.options) ? activePoll.options.reduce((sum: number, opt: any) => sum + (opt?.votes || 0), 0) : 0;
 
     return (
         <div className="fixed bottom-20 right-4 z-50 w-full max-w-sm animate-in slide-in-from-bottom-5">
@@ -104,9 +145,10 @@ export function PollWidget() {
                     <CardTitle className="text-sm font-bold flex items-center gap-2">
                         <BarChart2 className="h-4 w-4 text-primary" />
                         {hasVoted ? 'Poll Results' : 'Live Poll'}
+                        {activePoll.expiresAt && !hasVoted && <PollCountdown expiresAt={activePoll.expiresAt} />}
                         {timeLeft !== null && !hasVoted && (
                             <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-auto animate-pulse">
-                                Auto-submitting in {timeLeft}s
+                                auto-submit in {timeLeft}s
                             </span>
                         )}
                     </CardTitle>
@@ -120,21 +162,24 @@ export function PollWidget() {
                     {!hasVoted ? (
                         <div className="space-y-4">
                             <RadioGroup onValueChange={handleOptionSelect} value={selectedOption?.toString()}>
-                                {activePoll.options.map((option: any, idx: number) => (
-                                    <div
-                                        key={idx}
-                                        className={cn(
-                                            "flex items-center space-x-2 p-2 rounded-lg transition-colors cursor-pointer",
-                                            selectedOption === idx ? "bg-primary/5 border border-primary/10" : "hover:bg-accent/50"
-                                        )}
-                                        onClick={() => handleOptionSelect(idx.toString())}
-                                    >
-                                        <RadioGroupItem value={idx.toString()} id={`option-${idx}`} />
-                                        <Label htmlFor={`option-${idx}`} className="text-sm font-medium cursor-pointer w-full">
-                                            {option.text}
-                                        </Label>
-                                    </div>
-                                ))}
+                                {Array.isArray(activePoll.options) && activePoll.options.map((option: any, idx: number) => {
+                                    if (!option) return null;
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={cn(
+                                                "flex items-center space-x-2 p-2 rounded-lg transition-colors cursor-pointer",
+                                                selectedOption === idx ? "bg-primary/5 border border-primary/10" : "hover:bg-accent/50"
+                                            )}
+                                            onClick={() => handleOptionSelect(idx.toString())}
+                                        >
+                                            <RadioGroupItem value={idx.toString()} id={`option-${idx}`} />
+                                            <Label htmlFor={`option-${idx}`} className="text-sm font-medium cursor-pointer w-full">
+                                                {option.text}
+                                            </Label>
+                                        </div>
+                                    );
+                                })}
                             </RadioGroup>
 
                             <div className="space-y-3 pt-2">
@@ -157,7 +202,8 @@ export function PollWidget() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {activePoll.options.map((option: any, idx: number) => {
+                            {Array.isArray(activePoll.options) && activePoll.options.map((option: any, idx: number) => {
+                                if (!option) return null;
                                 const percentage = totalVotes > 0 ? Math.round((option.votes || 0) / totalVotes * 100) : 0;
                                 return (
                                     <div key={idx} className="space-y-1.5">

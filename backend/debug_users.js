@@ -1,25 +1,26 @@
 const mongoose = require('mongoose');
-require('dotenv').config();
-require('./models/User');
-require('./models/Club');
-require('./models/Challenge');
+const dotenv = require('dotenv');
+dotenv.config();
 
-const checkUsers = async () => {
+const User = require('./models/User');
+const Club = require('./models/Club');
+
+const debugUsers = async () => {
     try {
         await mongoose.connect(process.env.MONGO_URI);
-        const challenges = await mongoose.model('Challenge').find({});
-        console.log('Challenges:', challenges.map(c => ({
-            title: c.title,
-            club: c.clubName,
-            college: c.college, // Check if this is undefined 
-            status: c.status
-        })));
+        console.log('Connected to MongoDB');
 
-        const clubs = await mongoose.model('Club').find({}, 'name college');
-        console.log('Club Details:', clubs.map(c => ({ name: c.name, college: c.college })));
+        const users = await User.find({});
+        console.log(`Found ${users.length} total users.`);
 
-        const club = await mongoose.model('Club').findOne();
-        console.log('Club:', JSON.stringify(club, null, 2));
+        users.forEach(u => {
+            console.log(`User: ${u.name} (${u.email}) - joinedClubs: ${JSON.stringify(u.joinedClubs)}`);
+        });
+
+        const clubs = await Club.find({});
+        clubs.forEach(c => {
+            console.log(`Club: ${c.name} (${c._id}) - memberCount: ${c.memberCount}`);
+        });
 
         process.exit(0);
     } catch (err) {
@@ -28,4 +29,4 @@ const checkUsers = async () => {
     }
 };
 
-checkUsers();
+debugUsers();

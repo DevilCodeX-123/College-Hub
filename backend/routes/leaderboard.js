@@ -32,7 +32,7 @@ router.get('/college', async (req, res) => {
         }
 
         const users = await User.find(query)
-            .select('name avatar college totalEarnedXP weeklyXP role')
+            .select('name avatar college totalEarnedXP weeklyXP role branch year skills')
             .sort({ weeklyXP: -1 })
             .limit(50);
 
@@ -41,6 +41,9 @@ router.get('/college', async (req, res) => {
             name: user.name,
             avatar: user.avatar,
             college: user.college,
+            branch: user.branch,
+            year: user.year,
+            skills: user.skills,
             points: user.weeklyXP || 0, // Show weeklyXP as the main leaderboard point
             totalXP: user.totalEarnedXP,
             rank: index + 1

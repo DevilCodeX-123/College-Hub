@@ -22,9 +22,11 @@ const userSchema = new mongoose.Schema({
         name: String,
         icon: String,
         description: String,
-        earnedAt: Date
+        challengeName: String,
+        clubName: String,
+        earnedAt: { type: Date, default: Date.now }
     }],
-    joinedClubs: [String],
+    joinedClubs: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Club' }],
     blocked: {
         website: { type: Boolean, default: false },
         clubs: { type: Boolean, default: false },
@@ -39,6 +41,13 @@ const userSchema = new mongoose.Schema({
         title: String,
         status: String,
         timestamp: { type: Date, default: Date.now }
+    }],
+    pointsHistory: [{
+        amount: Number,
+        reason: String,
+        timestamp: { type: Date, default: Date.now },
+        sourceId: String, // ID of challenge, project, etc.
+        sourceType: { type: String, enum: ['challenge', 'project', 'event', 'bonus', 'initial'] }
     }],
     lastLoginDate: Date
 }, { timestamps: true });

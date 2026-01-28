@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { isBefore, endOfDay } from 'date-fns';
 import { Layout } from '@/components/layout/Layout';
 import { ChallengeCard } from '@/components/challenges/ChallengeCard';
 import { Input } from '@/components/ui/input';
@@ -24,19 +25,43 @@ export default function Challenges() {
     localStorage.setItem('last_viewed_challenges', new Date().toISOString());
   }, []);
 
-  const { data: challenges = [], isLoading, error } = useQuery({
+  const { data: challenges = [], isLoading, error } = useQuery<Challenge[]>({
     queryKey: ['challenges'],
     queryFn: () => api.getChallenges(undefined, undefined, user?.id || user?._id),
   });
 
   const filterChallenges = (status: string) => {
     return challenges.filter(challenge => {
-      const matchesSearch = challenge.title.toLowerCase().includes(search.toLowerCase()) ||
-        challenge.description.toLowerCase().includes(search.toLowerCase());
+      const challengeTitle = challenge.title || '';
+      const challengeDesc = challenge.description || '';
+      const challengeDiff = challenge.difficulty || 'medium';
+
+      const matchesSearch = challengeTitle.toLowerCase().includes(search.toLowerCase()) ||
+        challengeDesc.toLowerCase().includes(search.toLowerCase());
+
       const matchesDifficulty = selectedDifficulty === 'All' ||
-        challenge.difficulty.toLowerCase() === selectedDifficulty.toLowerCase();
+        challengeDiff.toLowerCase() === selectedDifficulty.toLowerCase();
+
       const matchesCategory = selectedCategory === 'All' || challenge.category === selectedCategory;
-      const matchesStatus = status === 'all' || challenge.status === status;
+
+      // Determine if challenge is live vs ended
+      const deadlineDate = challenge.deadline ? new Date(challenge.deadline) : null;
+      const isPastDeadline = deadlineDate ? isBefore(endOfDay(deadlineDate), new Date()) : false;
+      const isCompleted = challenge.status === 'completed';
+
+      let matchesStatus = status === 'all' || challenge.status === status;
+
+      // Strict Tab Logic:
+      // Active: status is 'active' AND deadline hasn't passed
+      // Completed: status is 'completed' OR deadline HAS passed
+      // Upcoming: status is 'upcoming' AND deadline hasn't passed
+      if (status === 'active') {
+        matchesStatus = challenge.status === 'active' && !isPastDeadline;
+      } else if (status === 'completed') {
+        matchesStatus = isCompleted || isPastDeadline;
+      } else if (status === 'upcoming') {
+        matchesStatus = challenge.status === 'upcoming' && !isPastDeadline;
+      }
 
       return matchesSearch && matchesDifficulty && matchesCategory && matchesStatus;
     });
@@ -125,16 +150,72 @@ export default function Challenges() {
             </TabsList>
 
             <TabsContent value="active">
-              <div className="grid md:grid-cols-2 gap-4">
-                {filterChallenges('active').map((challenge) => (
-                  <ChallengeCard key={challenge.id} challenge={challenge} />
-                ))}
-              </div>
-              {filterChallenges('active').length === 0 && (
-                <p className="text-center py-12 text-muted-foreground">
-                  No active challenges found.
-                </p>
-              )}
+              {(() => {
+                const activeChallenges = filterChallenges('active');
+                const joinedChallenges = activeChallenges.filter(challenge => {
+                  const challengeId = challenge.id || challenge._id;
+                  return user?.activity?.some(a =>
+                    a.type === 'challenge' &&
+                    (a.refId === challengeId || (challenge.id && a.refId === challenge.id) || (challenge._id && a.refId === challenge._id))
+                  );
+                });
+                const availableChallenges = activeChallenges.filter(challenge => {
+                  const challengeId = challenge.id || challenge._id;
+                  return !user?.activity?.some(a =>
+                    a.type === 'challenge' &&
+                    (a.refId === challengeId || (challenge.id && a.refId === challenge.id) || (challenge._id && a.refId === challenge._id))
+                  );
+                });
+
+                return (
+                  <div className="space-y-6">
+                    {/* My Challenges Section */}
+                    {joinedChallenges.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-bold">My Challenges</h3>
+                          <Badge variant="secondary" className="bg-primary/10 text-primary">
+                            {joinedChallenges.length}
+                          </Badge>
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-4 p-4 bg-primary/5 rounded-lg border-2 border-primary/20">
+                          {joinedChallenges.map((challenge) => (
+                            <ChallengeCard key={challenge.id} challenge={challenge} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Available Challenges Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold">Available Challenges</h3>
+                        <Badge variant="outline">
+                          {availableChallenges.length}
+                        </Badge>
+                      </div>
+                      {availableChallenges.length === 0 ? (
+                        <p className="text-center py-12 text-muted-foreground">
+                          No more available challenges. Check back later!
+                        </p>
+                      ) : (
+                        <div className="grid md:grid-cols-2 gap-4">
+                          {availableChallenges.map((challenge) => (
+                            <ChallengeCard key={challenge.id} challenge={challenge} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* No challenges at all */}
+                    {activeChallenges.length === 0 && (
+                      <p className="text-center py-12 text-muted-foreground">
+                        No active challenges found.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="upcoming">

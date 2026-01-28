@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { cn } from "@/lib/utils";
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,7 +32,8 @@ import {
     Edit,
     Flag,
     UserCog,
-    Clock
+    Clock,
+    Megaphone
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -49,7 +51,12 @@ import { CreateLocationDialog } from '@/components/owner/CreateLocationDialog';
 import { ExtendPollDialog } from '@/components/owner/ExtendPollDialog';
 import { ComprehensiveClubSettingsDialog } from '@/components/owner/ComprehensiveClubSettingsDialog';
 import { ManageClubTasks } from '@/components/dashboard/ManageClubTasks';
+import { ClubCoordinatorView } from '@/components/club/ClubCoordinatorView';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { CollegeFeedbackManagement } from '@/components/owner/CollegeFeedbackManagement';
+import { MessageCircle } from 'lucide-react';
 
 interface CollegeAdminViewProps {
     collegeName: string;
@@ -74,6 +81,7 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
     const [selectedClubForSettings, setSelectedClubForSettings] = useState<any>(null);
     const [isClubSettingsOpen, setIsClubSettingsOpen] = useState(false);
     const [isCollegeTasksOpen, setIsCollegeTasksOpen] = useState(false);
+    const [selectedClubIdForManagement, setSelectedClubIdForManagement] = useState<string>('');
 
     // Fetch college-specific data
     const { data: stats } = useQuery({
@@ -86,12 +94,12 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
             const myCollegeProjects = await api.getProjects(collegeName);
 
             return {
-                totalStudents: myCollegeUsers.length,
-                totalCoAdmins: myCollegeUsers.filter((u: any) => u.role === 'co_admin').length,
-                totalClubs: myCollegeClubs.length,
-                totalChallenges: myCollegeChallenges.length,
-                totalProjects: myCollegeProjects.length,
-                blockedStudents: myCollegeUsers.filter((u: any) => u.blocked?.website).length
+                totalStudents: (myCollegeUsers || []).length,
+                totalCoAdmins: (myCollegeUsers || []).filter((u: any) => u?.role === 'co_admin').length,
+                totalClubs: (myCollegeClubs || []).length,
+                totalChallenges: (myCollegeChallenges || []).length,
+                totalProjects: (myCollegeProjects || []).length,
+                blockedStudents: (myCollegeUsers || []).filter((u: any) => u?.blocked?.website).length
             };
         }
     });
@@ -108,9 +116,9 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
         queryFn: () => api.getClubs(collegeName, user?.id || user?._id)
     });
 
-    const filteredStudents = collegeStudents.filter((u: any) =>
-        u.name?.toLowerCase()?.includes(searchQuery.toLowerCase()) ||
-        u.email?.toLowerCase()?.includes(searchQuery.toLowerCase())
+    const filteredStudents = (collegeStudents || []).filter((u: any) =>
+        u?.name?.toLowerCase()?.includes(searchQuery.toLowerCase()) ||
+        u?.email?.toLowerCase()?.includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -154,21 +162,21 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                         Students
                     </TabsTrigger>
 
-                    <TabsTrigger value="clubs" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                        <Building2 className="h-4 w-4 mr-2" />
-                        Clubs
-                    </TabsTrigger>
                     <TabsTrigger value="polls" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
                         <Target className="h-4 w-4 mr-2" />
                         Polls
+                    </TabsTrigger>
+                    <TabsTrigger value="club-management" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                        <Building2 className="h-4 w-4 mr-2" />
+                        Clubs
                     </TabsTrigger>
                     <TabsTrigger value="notifications" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
                         <Settings className="h-4 w-4 mr-2" />
                         Notifications
                     </TabsTrigger>
-                    <TabsTrigger value="leaderboard" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                        <Trophy className="h-4 w-4 mr-2" />
-                        Leaderboard
+                    <TabsTrigger value="feedback" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                        <MessageCircle className="h-4 w-4 mr-2" />
+                        Feedback
                     </TabsTrigger>
                     <TabsTrigger value="notes" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
                         <BookOpen className="h-4 w-4 mr-2" />
@@ -260,7 +268,7 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                                 Manage Students
                             </Button>
 
-                            <Button variant="outline" className="justify-start" onClick={() => setActiveTab('clubs')}>
+                            <Button variant="outline" className="justify-start" onClick={() => setActiveTab('club-management')}>
                                 <Building2 className="h-4 w-4 mr-2" />
                                 Manage Clubs
                             </Button>
@@ -329,10 +337,14 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="clubs" className="space-y-6">
+                {/* Clubs Tab (Combined Management) */}
+                <TabsContent value="club-management" className="space-y-6">
                     <Card>
                         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                            <CardTitle>Club Management</CardTitle>
+                            <div>
+                                <CardTitle>Club Management</CardTitle>
+                                <p className="text-sm text-muted-foreground mt-1">Select a club to access its coordinator panel directly</p>
+                            </div>
                             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                                 <Button variant="outline" onClick={() => setIsCollegeTasksOpen(true)} className="flex-1 sm:flex-none h-9 text-xs">
                                     <ClipboardList className="h-4 w-4 mr-2" />
@@ -345,72 +357,58 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            {collegeClubs.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <Building2 className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                                    <p className="text-muted-foreground">No clubs created yet for {collegeName}</p>
-                                    <Button className="mt-4" onClick={() => setIsCreateClubOpen(true)}>Create Your First Club</Button>
+                            <div className="space-y-4">
+                                <div className="max-w-md space-y-2">
+                                    <Label>Select Club to Manage</Label>
+                                    <Select value={selectedClubIdForManagement} onValueChange={setSelectedClubIdForManagement}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Choose a club..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {collegeClubs.map((club: any) => (
+                                                <SelectItem key={club._id || club.id} value={club._id || club.id}>
+                                                    {club.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                    {collegeClubs.map((club: any) => (
-                                        <Card key={club._id} className="border-2">
-                                            <CardHeader>
-                                                <CardTitle className="text-lg">{club.name}</CardTitle>
-                                                <Badge variant="outline">{club.memberCount || 0} members</Badge>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <p className="text-sm text-muted-foreground mb-3">{club.description}</p>
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="flex-1"
-                                                        onClick={() => navigate(`/clubs/${club._id || club.id}`)}
-                                                    >
-                                                        View Details
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                            setSelectedClubForSettings(club);
-                                                            setIsClubSettingsOpen(true);
-                                                        }}
-                                                    >
-                                                        <Settings className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ))}
-                                </div>
-                            )}
+
+                                {selectedClubIdForManagement ? (
+                                    <div className="border-t pt-6 mt-6">
+                                        <div className="flex justify-end mb-4">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const club = collegeClubs.find((c: any) => (c._id || c.id) === selectedClubIdForManagement);
+                                                    setSelectedClubForSettings(club);
+                                                    setIsClubSettingsOpen(true);
+                                                }}
+                                            >
+                                                <Settings className="h-4 w-4 mr-2" /> Club Settings
+                                            </Button>
+                                        </div>
+                                        <ClubCoordinatorView
+                                            clubId={selectedClubIdForManagement}
+                                            collegeName={collegeName}
+                                            isImpersonating={true}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="py-20 text-center border-2 border-dashed rounded-xl">
+                                        <Building2 className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                                        <p className="text-muted-foreground">Select a club from the list above or create a new one to begin management.</p>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
 
-                {/* Leaderboard Tab */}
-                <TabsContent value="leaderboard" className="space-y-6">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <div>
-                                <CardTitle>College Leaderboard</CardTitle>
-                                <p className="text-sm text-muted-foreground mt-1">Manage college-wide rankings</p>
-                            </div>
-                            <Button onClick={() => setIsCreateChallengeOpen(true)}>
-                                <Trophy className="h-4 w-4 mr-2" />
-                                Create Leaderboard (via Challenge)
-                            </Button>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-center py-12">
-                                <Trophy className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                                <p className="text-muted-foreground mb-2">Leaderboard feature is driven by Challenges.</p>
-                                <Badge variant="outline">System Generated Rankings</Badge>
-                            </div>
-                        </CardContent>
-                    </Card>
+                {/* Feedback Tab */}
+                <TabsContent value="feedback" className="space-y-6">
+                    <CollegeFeedbackManagement collegeName={collegeName} />
                 </TabsContent>
 
                 <TabsContent value="polls" className="space-y-6">
@@ -462,17 +460,7 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                             </Button>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                <div className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-bold text-blue-700 dark:text-blue-400">Welcome to Campus Hub!</p>
-                                            <p className="text-sm text-blue-600 dark:text-blue-500">Sent to all students • 2 days ago</p>
-                                        </div>
-                                        <Badge className="bg-blue-500 text-white">Sent</Badge>
-                                    </div>
-                                </div>
-                            </div>
+                            <NotificationsHistory collegeName={collegeName} />
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -721,6 +709,42 @@ function NotesList({ collegeName }: { collegeName: string }) {
     );
 }
 
+function PollCountdown({ expiresAt }: { expiresAt: string }) {
+    const [timeLeft, setTimeLeft] = useState<string>('');
+
+    useEffect(() => {
+        const updateTimer = () => {
+            const now = new Date().getTime();
+            const expiry = new Date(expiresAt).getTime();
+            const diff = expiry - now;
+
+            if (diff <= 0) {
+                setTimeLeft('Expired');
+                return;
+            }
+
+            const h = Math.floor(diff / (1000 * 60 * 60));
+            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+            setTimeLeft(`${h}h ${m}m ${s}s remaining`);
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, [expiresAt]);
+
+    if (!timeLeft) return null;
+
+    return (
+        <p className={`text-xs mt-1 font-mono ${timeLeft === 'Expired' ? 'text-destructive' : 'text-blue-500 animate-pulse'}`}>
+            <Clock className="inline h-3 w-3 mr-1" />
+            {timeLeft}
+        </p>
+    );
+}
+
 function CollegePollsList({ college, status }: { college: string, status: string }) {
     const { user } = useAuth();
     const { data: polls = [], isLoading } = useQuery<any[]>({
@@ -776,15 +800,12 @@ function CollegePollsList({ college, status }: { college: string, status: string
                             <div className="flex justify-between items-start mb-3">
                                 <div>
                                     <p className="font-bold">{p.question}</p>
-                                    {p.expiresAt && (
-                                        <p className={`text-xs mt-1 ${timeRemaining === 'Expired' ? 'text-destructive' : 'text-blue-500'}`}>
-                                            <Clock className="inline h-3 w-3 mr-1" />
-                                            {timeRemaining || 'Expired'}
-                                        </p>
-                                    )}
+                                    {p.expiresAt && <PollCountdown expiresAt={p.expiresAt} />}
                                 </div>
                                 <div className="flex gap-2">
-                                    <Badge variant={p.status === 'active' ? 'default' : 'secondary'}>{p.status}</Badge>
+                                    <Badge variant={(p.status === 'active') ? 'default' : 'secondary'} className="font-bold">
+                                        {(p.expiresAt && new Date() >= new Date(p.expiresAt)) ? 'EXPIRED' : p.status.toUpperCase()}
+                                    </Badge>
                                     {p.status === 'active' && isCreator && (
                                         <>
                                             <Button
@@ -855,8 +876,87 @@ function CollegePollsList({ college, status }: { college: string, status: string
                     onClose={() => setExtendPollId(null)}
                     pollId={extendPollId}
                     currentExpiry={currentExpiry}
+                    college={college}
                 />
             )}
+        </div>
+    );
+}
+
+function NotificationsHistory({ collegeName }: { collegeName: string }) {
+    const { user } = useAuth();
+    const { data: notifications = [], isLoading } = useQuery({
+        queryKey: ['broadcast-notifications', user?.id, collegeName],
+        queryFn: async () => {
+            const allNotifs = await api.getNotifications(user?.id || '', user?.role || 'student');
+            // Filter to ONLY show manual broadcasts sent from this panel
+            // Categorical recipients indicate a manual broadcast, or explicitly tagged
+            const categoricalRecipients = ['all', 'students', 'coordinators', 'admins', 'members'];
+            return allNotifs.filter((n: any) =>
+                n.isManualBroadcast === true ||
+                categoricalRecipients.includes(n.recipient)
+            );
+        }
+    });
+
+    if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+
+    if (notifications.length === 0) {
+        return (
+            <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl bg-slate-50/50">
+                <Megaphone className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                <p>No manual broadcast history yet.</p>
+                <p className="text-xs mt-2 italic px-8">Broadcasts sent to students or groups will appear here.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-3 custom-scrollbar">
+            {notifications.map((notif: any) => (
+                <Card key={notif._id || notif.id} className={cn(
+                    "relative overflow-hidden group hover:shadow-lg transition-all duration-300 border-l-4 shadow-sm",
+                    notif.type === 'alert' ? "border-l-red-500 bg-red-50/10" :
+                        notif.type === 'success' ? "border-l-green-500 bg-green-50/10" :
+                            notif.type === 'warning' ? "border-l-amber-500 bg-amber-50/10" :
+                                "border-l-primary bg-primary/5"
+                )}>
+                    <CardHeader className="pb-3 border-b border-border/10">
+                        <div className="flex justify-between items-start">
+                            <div className="space-y-1.5">
+                                <span className={cn(
+                                    "px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest inline-block mb-1",
+                                    notif.type === 'alert' ? "bg-red-100 text-red-700" :
+                                        notif.type === 'success' ? "bg-green-100 text-green-700" :
+                                            notif.type === 'warning' ? "bg-amber-100 text-amber-700" :
+                                                "bg-primary/20 text-primary"
+                                )}>
+                                    {notif.type || 'INFO'} BROADCAST
+                                </span>
+                                <h4 className="font-extrabold text-xl leading-tight text-foreground/90">{notif.title}</h4>
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    <Badge variant="secondary" className="text-[10px] uppercase font-black px-2 py-0.5 border shadow-sm bg-white dark:bg-black">
+                                        SENT TO: {notif.recipient.toUpperCase()}
+                                    </Badge>
+                                    <span className="opacity-30 text-[10px]">|</span>
+                                    <span className="flex items-center gap-1 uppercase tracking-tight text-[10px] font-bold text-muted-foreground">
+                                        <Clock className="h-3 w-3" />
+                                        {new Date(notif.createdAt).toLocaleDateString()} AT {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                </div>
+                            </div>
+                            <Badge variant={notif.type === 'alert' || notif.type === 'warning' ? 'destructive' : (notif.type === 'success' ? 'default' : 'secondary')} className="font-black uppercase text-[10px] h-5 shadow-sm">
+                                {notif.type}
+                            </Badge>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-4 pb-4">
+                        <div className="bg-background/90 p-5 rounded-2xl border border-border shadow-inner group-hover:bg-background transition-all">
+                            <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap text-foreground font-medium">{notif.message}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            ))}
         </div>
     );
 }

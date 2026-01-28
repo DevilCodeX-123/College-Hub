@@ -10,7 +10,7 @@ import {
   Crown,
   Building2,
   Target,
-  ShieldAlert,
+  HelpCircle,
   Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ const navItems = [
   { path: '/leaderboard', icon: Trophy, label: 'Leaderboard' },
   { path: '/profile', icon: UserIcon, label: 'Profile' },
   { path: '/campus-map', icon: Map, label: 'Smart Campus' },
+  { path: '/help', icon: HelpCircle, label: 'Help & More' },
 ];
 
 export function MobileNav({ isOpen, onClose }: MobileNavProps) {

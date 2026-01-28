@@ -26,6 +26,8 @@ app.use('/api/events', require('./routes/events'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/notes', require('./routes/notes'));
 app.use('/api/locations', require('./routes/locations'));
+app.use('/api/team-chat', require('./routes/teamChat'));
+app.use('/api/faqs', require('./routes/faqs'));
 
 // Weekly Leaderboard Reset & Student Rewards (Monday 00:00)
 const cron = require('node-cron');
@@ -113,6 +115,15 @@ cron.schedule('0 0 1 * *', async () => {
 
 app.get('/', (req, res) => {
     res.send('API is running...');
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(`[Error] ${req.method} ${req.url} - ${err.message}`);
+    res.status(err.status || 500).json({
+        message: err.message || 'Internal Server Error',
+        stack: process.env.NODE_ENV === 'production' ? null : err.stack
+    });
 });
 
 const PORT = process.env.PORT || 5000;

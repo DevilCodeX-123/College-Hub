@@ -24,48 +24,96 @@ interface ManageClubTeamDialogProps {
     onClose: () => void;
     club: any;
     collegeUsers: any[];
+    defaultTab?: string;
+    targetUserId?: string;
+    isPromotionOnly?: boolean;
 }
 
-export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: ManageClubTeamDialogProps) {
+export function ManageClubTeamDialog({ open, onClose, club, collegeUsers, defaultTab = 'secretary', targetUserId, isPromotionOnly = false }: ManageClubTeamDialogProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [selectedUser, setSelectedUser] = useState('');
-    const [selectedRole, setSelectedRole] = useState<'coordinator' | 'head' | 'core_member' | 'co_coordinator' | 'co-coordinator'>('core_member');
+    const [selectedRole, setSelectedRole] = useState<string>('core_member');
     const [customTitle, setCustomTitle] = useState('');
-
-    // Filter potential candidates
-    const candidates = collegeUsers.filter((u: any) => u.role !== 'admin' && u.role !== 'owner');
-
-    // Permission check - Restricted Admins can only add Core Members
-    const isRestrictedAdmin = user?.role === 'club_head' || user?.role === 'club_co_coordinator';
-
-    // Force Core Member role for restricted admins
-    useEffect(() => {
-        if (isRestrictedAdmin) {
-            setSelectedRole('core_member');
-        }
-    }, [isRestrictedAdmin, open]);
+    const [activeTab, setActiveTab] = useState(defaultTab);
 
     const clubId = club?._id || club?.id;
+
+    // Filter to only show members of the club
+    const candidates = collegeUsers.filter((u: any) =>
+        u.role !== 'admin' &&
+        u.role !== 'owner' &&
+        u.joinedClubs?.includes(clubId)
+    );
+
+    // Unified state reset and sync when dialog opens or target changes
+    useEffect(() => {
+        if (!open) return;
+
+        // Force correct tab and role based on how the dialog was opened
+        const initialTab = isPromotionOnly ? 'core' : defaultTab;
+        setActiveTab(initialTab);
+
+        if (initialTab === 'leadership') setSelectedRole('coordinator');
+        else if (initialTab === 'secretary') setSelectedRole('head');
+        else setSelectedRole('core_member');
+
+        // Pre-select user if provided
+        if (targetUserId) {
+            setSelectedUser(targetUserId);
+            // If they are already in core team, sync their info
+            const existingMember = club?.coreTeam?.find((m: any) => m.userId === targetUserId);
+            if (existingMember) {
+                handleEdit(existingMember);
+            } else {
+                setCustomTitle('');
+            }
+        } else {
+            setSelectedUser('');
+            setCustomTitle('');
+        }
+    }, [open, defaultTab, targetUserId, club?.coreTeam]);
+
+    const isRestrictedAdmin = user?.role === 'club_head' || user?.role === 'club_co_coordinator';
 
     const updateTeamMutation = useMutation({
         mutationFn: async ({ userId, role, customTitle }: { userId: string, role: string, customTitle: string }) => {
             let apiRole: string = 'student';
             if (role === 'coordinator') apiRole = 'club_coordinator';
+            else if (role === 'faculty_coordinator') apiRole = 'club_coordinator'; // Backend role remains same
             else if (role === 'co_coordinator' || role === 'co-coordinator') apiRole = 'club_co_coordinator';
             else if (role === 'head' || role === 'secretary') apiRole = 'club_head';
             else if (role === 'core_member') apiRole = 'core_member';
 
+            // Automatic Demotion Logic: If assigning a NEW regular coordinator, 
+            // the OLD regular coordinator becomes a secretary automatically.
+            if (role === 'coordinator') {
+                const oldCoordinator = club?.coreTeam?.find((m: any) =>
+                    m.role === 'club_coordinator' &&
+                    m.customTitle !== 'Faculty Coordinator' && // Don't demote faculty
+                    m.userId !== userId
+                );
+
+                if (oldCoordinator) {
+                    await api.updateClubCoreTeam(clubId, {
+                        userId: oldCoordinator.userId,
+                        role: 'club_head',
+                        customTitle: oldCoordinator.customTitle,
+                        requestingUserId: user?.id || user?._id
+                    });
+                }
+            }
+
             return api.updateClubCoreTeam(clubId, {
                 userId,
                 role: apiRole,
-                customTitle,
+                customTitle: role === 'faculty_coordinator' ? 'Faculty Coordinator' : customTitle,
                 requestingUserId: user?.id || user?._id
             });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['club', clubId] });
+            queryClient.invalidateQueries({ queryKey: ['club-management', clubId] });
             queryClient.invalidateQueries({ queryKey: ['my-club'] });
             queryClient.invalidateQueries({ queryKey: ['all-users'] });
             toast({ title: 'Team Member Updated' });
@@ -79,6 +127,7 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: Mana
     const removeTeamMutation = useMutation({
         mutationFn: (userId: string) => api.removeCoreTeamMember(clubId, userId),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['club-management', clubId] });
             queryClient.invalidateQueries({ queryKey: ['my-club'] });
             queryClient.invalidateQueries({ queryKey: ['all-users'] });
             toast({ title: 'Member Demoted' });
@@ -87,6 +136,21 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: Mana
 
     const handleAssign = () => {
         if (!selectedUser || !clubId) return;
+
+        // Prevent multiple regular coordinators (Allow 1 regular + 1 faculty)
+        if (selectedRole === 'coordinator') {
+            const currentCoordinator = club?.coreTeam?.find((m: any) =>
+                m.role === 'club_coordinator' && m.customTitle !== 'Faculty Coordinator'
+            );
+            if (currentCoordinator && currentCoordinator.userId !== selectedUser) {
+                if (!confirm(`This club already has a coordinator (${currentCoordinator.name}). Assigning a new one will automatically demote the current one to Secretary. Proceed?`)) {
+                    return;
+                }
+            }
+        }
+
+        if (!confirm(`Are you sure you want to assign this role?`)) return;
+
         updateTeamMutation.mutate({ userId: selectedUser, role: selectedRole, customTitle });
     };
 
@@ -101,6 +165,9 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: Mana
         let role: any = 'core_member';
         if (member.role === 'club_head') role = 'head';
         if (member.role === 'club_co_coordinator') role = 'co_coordinator';
+        if (member.role === 'club_coordinator') {
+            role = member.customTitle === 'Faculty Coordinator' ? 'faculty_coordinator' : 'coordinator';
+        }
         setSelectedRole(role);
         setCustomTitle(member.customTitle || '');
     };
@@ -116,17 +183,23 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: Mana
                 </DialogHeader>
 
                 <div className="space-y-4">
-                    <Tabs defaultValue="secretary" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 mb-4">
-                            <TabsTrigger value="secretary">
-                                <Crown className="h-3.5 w-3.5 mr-2" />
-                                Secretary Panel
-                            </TabsTrigger>
-                            <TabsTrigger value="core">
-                                <Shield className="h-3.5 w-3.5 mr-2" />
-                                Core Team
-                            </TabsTrigger>
-                        </TabsList>
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                        {!isPromotionOnly && (
+                            <TabsList className="grid w-full grid-cols-3 mb-4">
+                                <TabsTrigger value="leadership">
+                                    <Crown className="h-3.5 w-3.5 mr-2 text-amber-500" />
+                                    Leadership
+                                </TabsTrigger>
+                                <TabsTrigger value="secretary">
+                                    <Crown className="h-3.5 w-3.5 mr-2 text-blue-500" />
+                                    Secretary
+                                </TabsTrigger>
+                                <TabsTrigger value="core">
+                                    <Shield className="h-3.5 w-3.5 mr-2 text-slate-500" />
+                                    Core Team
+                                </TabsTrigger>
+                            </TabsList>
+                        )}
 
                         <div className="space-y-6">
                             {/* Form Section */}
@@ -190,14 +263,40 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: Mana
                                                         };
                                                         const myPower = ROLE_HIERARCHY[user?.role || ''] || 0;
 
-                                                        const options = [
-                                                            { value: 'core_member', label: 'Core Team', power: 2 },
-                                                            { value: 'head', label: 'Secretary', power: 3 },
-                                                            { value: 'coordinator', label: 'Coordinator', power: 4 }
-                                                        ];
+                                                        const currentCoordinator = club?.coreTeam?.find((m: any) => m.role === 'club_coordinator' && m.customTitle !== 'Faculty Coordinator');
+                                                        const currentFaculty = club?.coreTeam?.find((m: any) => m.role === 'club_coordinator' && m.customTitle === 'Faculty Coordinator');
+
+                                                        const isEditingThisCoordinator = currentCoordinator?.userId === selectedUser;
+                                                        const isEditingThisFaculty = currentFaculty?.userId === selectedUser;
+
+                                                        const options = isPromotionOnly
+                                                            ? [{ value: 'core_member', label: 'Core Team', power: 2 }]
+                                                            : [
+                                                                { value: 'core_member', label: 'Core Team', power: 2 },
+                                                                { value: 'head', label: 'Secretary', power: 3 },
+                                                                { value: 'coordinator', label: 'Coordinator', power: 4 },
+                                                                { value: 'faculty_coordinator', label: 'Faculty Coordinator', power: 4 }
+                                                            ];
 
                                                         return options
                                                             .filter(opt => user?.role === 'owner' || opt.power < myPower)
+                                                            .filter(opt => {
+                                                                // Always show core and secretary
+                                                                if (opt.power < 4) return true;
+
+                                                                // For Coordinators:
+                                                                if (opt.value === 'coordinator' && currentCoordinator && !isEditingThisCoordinator) {
+                                                                    // Coordinator exists, but demotion is automatic so we can show it
+                                                                    return true;
+                                                                }
+
+                                                                // For Faculty: Limit to 1
+                                                                if (opt.value === 'faculty_coordinator' && currentFaculty && !isEditingThisFaculty) {
+                                                                    return false;
+                                                                }
+
+                                                                return true;
+                                                            })
                                                             .map(opt => (
                                                                 <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                                                             ));
@@ -212,6 +311,7 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: Mana
                                                 onChange={(e) => setCustomTitle(e.target.value)}
                                                 placeholder="e.g. Design Lead"
                                                 className="h-10 bg-white"
+                                                disabled={selectedRole === 'faculty_coordinator'}
                                             />
                                         </div>
                                     </div>
@@ -237,6 +337,45 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers }: Mana
 
                             {/* Current Lists */}
                             <div className="space-y-6">
+                                <TabsContent value="leadership" className="m-0 space-y-3">
+                                    <h4 className="font-black text-[10px] uppercase tracking-[0.2em] text-amber-600/70 mb-2">Club Coordinators (Admin View)</h4>
+                                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2">
+                                        {club?.coreTeam?.filter((m: any) => m.role === 'club_coordinator').map((m: any) => (
+                                            <div key={m.userId} className="p-3 rounded-lg border-2 border-amber-100 bg-amber-50/20 flex items-center justify-between group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-9 w-9 rounded-full bg-amber-600 flex items-center justify-center shadow-lg">
+                                                        <Crown className="h-5 w-5 text-white" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-black text-amber-900 text-sm uppercase tracking-tight">{m.name}</p>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Badge className={`${m.customTitle === 'Faculty Coordinator' ? 'bg-indigo-600' : 'bg-amber-600'} text-[8px] h-4 py-0 font-bold tracking-tighter shrink-0 text-white`}>
+                                                                {m.customTitle === 'Faculty Coordinator' ? 'FACULTY' : 'COORDINATOR'}
+                                                            </Badge>
+                                                            {m.customTitle && m.customTitle !== 'Faculty Coordinator' && <span className="text-[10px] text-amber-600/60 font-medium italic truncate max-w-[100px]">"{m.customTitle}"</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {(user?.role === 'admin' || user?.role === 'owner') && (
+                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleEdit(m)}>
+                                                            <Edit className="h-3.5 w-3.5 text-amber-600" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10" onClick={() => {
+                                                            if (confirm(`Remove Coordinator Status for ${m.name}?`)) removeTeamMutation.mutate(m.userId);
+                                                        }}>
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {(!club?.coreTeam?.some((m: any) => m.role === 'club_coordinator')) && (
+                                            <div className="py-8 text-center border-2 border-dashed border-amber-100 rounded-lg text-xs text-amber-400 font-medium">No Coordinator assigned yet.</div>
+                                        )}
+                                    </div>
+                                </TabsContent>
+
                                 <TabsContent value="secretary" className="m-0 space-y-3">
                                     <h4 className="font-black text-[10px] uppercase tracking-[0.2em] text-blue-600/70 mb-2">Active Secretaries & Heads</h4>
                                     <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2">

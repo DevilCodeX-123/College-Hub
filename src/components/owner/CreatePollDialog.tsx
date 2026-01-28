@@ -40,7 +40,7 @@ export function CreatePollDialog({ open, onClose, collegeName }: CreatePollDialo
     const createPollMutation = useMutation({
         mutationFn: (data: any) => api.createPoll(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['all-polls'] });
+            queryClient.invalidateQueries({ queryKey: ['college-polls'] });
             toast({
                 title: 'Poll Created Successfully',
                 description: `Poll for ${collegeName} has been created`
@@ -102,12 +102,13 @@ export function CreatePollDialog({ open, onClose, collegeName }: CreatePollDialo
         const payload = {
             question,
             options: validOptions,
-            createdBy: user.id,
-            targetRoles: ['student', 'club_coordinator', 'admin', 'co_admin'], // Comprehensive target for college polls
+            createdBy: user.id || user._id,
+            targetRoles: ['student', 'club_coordinator', 'admin', 'co_admin', 'owner'], // Comprehensive target for college polls
             college: user.college || collegeName, // Scope by the admin's college
             expiresAt
         };
 
+        console.log('Sending Poll Creation Payload:', payload);
         createPollMutation.mutate(payload);
     };
 

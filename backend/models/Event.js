@@ -24,10 +24,43 @@ const eventSchema = new mongoose.Schema({
         email: String,
         program: String, // "Dance", "Singing", "General" etc.
         registeredAt: { type: Date, default: Date.now },
-        comments: String
+        comments: String,
+        registrationType: { type: String, enum: ['individual', 'team'], default: 'individual' },
+        teamMembers: [{
+            name: String,
+            email: String
+        }],
+        // Payment proof fields
+        paymentProofUrl: String,
+        transactionId: String
     }],
     stopRegistration: { type: Boolean, default: false },
-    isCompleted: { type: Boolean, default: false }
+    isCompleted: { type: Boolean, default: false },
+    // Detailed Completion Fields
+    duration: String, // e.g., "10:00 AM - 4:00 PM"
+    scope: {
+        type: String,
+        enum: ['Club Level', 'College Level', 'Inter-College'],
+        default: 'Club Level'
+    },
+    organizingClub: String,
+    collaboratingClubs: [String],
+    chiefGuests: [{
+        name: String,
+        designation: String
+    }],
+    competitions: [String],
+    winners: [{
+        competition: String, // Which contest/activity this winner belongs to
+        name: String,
+        position: String,
+        prize: String,
+        isTeam: { type: Boolean, default: false }
+    }],
+    // Payment Configuration (Optional)
+    paymentQRCode: String, // URL to QR code image
+    paymentAmountIndividual: Number,
+    paymentAmountTeam: Number
 }, { timestamps: true });
 
 eventSchema.virtual('id').get(function () {

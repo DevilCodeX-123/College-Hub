@@ -94,12 +94,19 @@ export function EditChallengeDialog({ open, onClose, challenge }: EditChallengeD
                     </div>
                     <div className='flex gap-4'>
                         <div className="flex-1">
-                            <Label>XP Points</Label>
-                            <Input type="number" value={points} onChange={(e) => setPoints(e.target.value)} />
+                            <Label className="flex justify-between">
+                                XP Points
+                                <span className="text-[10px] text-muted-foreground uppercase font-mono italic">Rule Locked</span>
+                            </Label>
+                            <Input
+                                className="bg-muted font-bold"
+                                value={points}
+                                readOnly
+                            />
                         </div>
                         <div className="flex-1">
                             <Label>Deadline</Label>
-                            <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+                            <Input type="date" min={new Date().toISOString().split('T')[0]} value={deadline} onChange={(e) => setDeadline(e.target.value)} />
                         </div>
                     </div>
                 </div>

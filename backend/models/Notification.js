@@ -23,6 +23,10 @@ const notificationSchema = new mongoose.Schema({
         enum: ['info', 'alert', 'success', 'warning', 'system'],
         default: 'info'
     },
+    category: {
+        type: String,
+        default: 'general'
+    },
     readBy: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'

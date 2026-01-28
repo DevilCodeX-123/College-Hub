@@ -67,45 +67,118 @@ export function EventRegistrationsDialog({ open, onOpenChange, event }: EventReg
                     </div>
                 </DialogHeader>
 
-                <div className="flex-1 overflow-auto border rounded-md mt-4">
-                    <Table>
-                        <TableHeader className="bg-muted/50 sticky top-0 z-10">
-                            <TableRow>
-                                <TableHead className="w-[200px]">Name</TableHead>
-                                <TableHead className="w-[200px]">Email</TableHead>
-                                <TableHead className="w-[150px]">Program</TableHead>
-                                <TableHead className="w-[250px]">Comments</TableHead>
-                                <TableHead className="w-[100px] text-right">Date</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {registrations.length === 0 ? (
+                <div className="flex-1 overflow-auto space-y-6 mt-4">
+                    {/* Individual Registrations Section */}
+                    <div className="border rounded-lg overflow-hidden border-blue-100">
+                        <div className="bg-blue-50 px-4 py-2 flex items-center justify-between">
+                            <h3 className="font-bold text-blue-900 flex items-center gap-2">
+                                👤 Individual Registrations
+                            </h3>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">
+                                {registrations.filter((r: any) => !r.teamMembers || r.teamMembers.length === 0).length}
+                            </span>
+                        </div>
+                        <Table>
+                            <TableHeader className="bg-blue-50/50">
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
-                                        No registrations yet.
-                                    </TableCell>
+                                    <TableHead className="w-[150px]">Name</TableHead>
+                                    <TableHead className="w-[180px]">Email</TableHead>
+                                    <TableHead className="w-[100px]">Program</TableHead>
+                                    <TableHead className="w-[120px]">Transaction ID</TableHead>
+                                    <TableHead className="w-[100px]">Payment Proof</TableHead>
+                                    <TableHead className="w-[80px] text-right">Date</TableHead>
                                 </TableRow>
-                            ) : (
-                                registrations.map((reg: any, idx: number) => (
-                                    <TableRow key={idx}>
-                                        <TableCell className="font-medium">{reg.name}</TableCell>
-                                        <TableCell>{reg.email}</TableCell>
-                                        <TableCell>
-                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                {reg.program || "General"}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground text-sm truncate max-w-[250px]" title={reg.comments}>
-                                            {reg.comments || "-"}
-                                        </TableCell>
-                                        <TableCell className="text-right text-xs text-muted-foreground">
-                                            {new Date(reg.registeredAt).toLocaleDateString()}
+                            </TableHeader>
+                            <TableBody>
+                                {registrations.filter((r: any) => !r.teamMembers || r.teamMembers.length === 0).length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center py-4 text-muted-foreground italic text-sm">
+                                            No individual registrations.
                                         </TableCell>
                                     </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
+                                ) : (
+                                    registrations.filter((r: any) => !r.teamMembers || r.teamMembers.length === 0).map((reg: any, idx: number) => (
+                                        <TableRow key={idx}>
+                                            <TableCell className="font-medium text-sm">{reg.name}</TableCell>
+                                            <TableCell className="text-xs">{reg.email}</TableCell>
+                                            <TableCell>
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-800">
+                                                    {reg.program || "General"}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell className="text-xs font-mono">{reg.transactionId || "-"}</TableCell>
+                                            <TableCell>
+                                                {reg.paymentProofUrl ? (
+                                                    <a href={reg.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">View</a>
+                                                ) : "-"}
+                                            </TableCell>
+                                            <TableCell className="text-right text-[10px] text-muted-foreground">
+                                                {new Date(reg.registeredAt).toLocaleDateString()}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    {/* Team Registrations Section */}
+                    <div className="border rounded-lg overflow-hidden border-purple-100">
+                        <div className="bg-purple-50 px-4 py-2 flex items-center justify-between">
+                            <h3 className="font-bold text-purple-900 flex items-center gap-2">
+                                👥 Team Registrations
+                            </h3>
+                            <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-1 rounded-full">
+                                {registrations.filter((r: any) => r.teamMembers && r.teamMembers.length > 0).length}
+                            </span>
+                        </div>
+                        <Table>
+                            <TableHeader className="bg-purple-50/50">
+                                <TableRow>
+                                    <TableHead className="w-[120px]">Team Lead</TableHead>
+                                    <TableHead className="w-[150px]">Lead Email</TableHead>
+                                    <TableHead className="w-[180px]">Team Members</TableHead>
+                                    <TableHead className="w-[120px]">Transaction ID</TableHead>
+                                    <TableHead className="w-[100px]">Payment Proof</TableHead>
+                                    <TableHead className="w-[80px] text-right">Date</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {registrations.filter((r: any) => r.teamMembers && r.teamMembers.length > 0).length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-center py-4 text-muted-foreground italic text-sm">
+                                            No team registrations.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    registrations.filter((r: any) => r.teamMembers && r.teamMembers.length > 0).map((reg: any, idx: number) => (
+                                        <TableRow key={idx}>
+                                            <TableCell className="font-medium text-sm">{reg.name}</TableCell>
+                                            <TableCell className="text-xs">{reg.email}</TableCell>
+                                            <TableCell>
+                                                <div className="space-y-1">
+                                                    {reg.teamMembers.map((tm: any, tmidx: number) => (
+                                                        <div key={tmidx} className="text-[10px] bg-purple-50 px-1.5 py-0.5 rounded">
+                                                            {tm.name}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-xs font-mono">{reg.transactionId || "-"}</TableCell>
+                                            <TableCell>
+                                                {reg.paymentProofUrl ? (
+                                                    <a href={reg.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-600 underline">View</a>
+                                                ) : "-"}
+                                            </TableCell>
+                                            <TableCell className="text-right text-[10px] text-muted-foreground">
+                                                {new Date(reg.registeredAt).toLocaleDateString()}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>

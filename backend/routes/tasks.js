@@ -10,7 +10,7 @@ const Club = require('../models/Club');
 // GET all tasks (filtered by user access and status)
 router.get('/', async (req, res) => {
     try {
-        const { userId, email, joinedClubs, status, requestingUserId } = req.query;
+        const { userId, email, joinedClubs, clubId, status, requestingUserId } = req.query;
         let query = {};
 
         if (requestingUserId) {
@@ -23,20 +23,45 @@ router.get('/', async (req, res) => {
             }
         }
 
+        // Initialize $and to combine all filters
+        query.$and = [];
+
+        // 1. Status Filter
         if (status) {
-            query.status = status;
+            query.$and.push({ status });
         } else {
-            query.status = 'active';
+            query.$and.push({ status: 'active' });
         }
 
-        // If filtering provided, return only relevant tasks
+        // 2. Deadline Filter (Only for active status)
+        const isRequestingActive = status === 'active' || !status;
+        if (isRequestingActive) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            query.$and.push({
+                $or: [
+                    { deadline: { $exists: false } },
+                    { deadline: null },
+                    { deadline: { $gte: today } }
+                ]
+            });
+        }
+
+        // 3. Admin/Club Filter
+        if (clubId) {
+            query.$and.push({ clubId });
+        }
+
+        // 4. Student Targeting Filter
         if (userId) {
             const clubsArray = joinedClubs ? joinedClubs.split(',') : [];
-            query.$or = [
-                { targetType: 'all' },
-                { targetType: 'club', clubId: { $in: clubsArray } },
-                { targetType: 'specific', targetEmails: email }
-            ];
+            query.$and.push({
+                $or: [
+                    { targetType: 'all' },
+                    { targetType: 'club', clubId: { $in: clubsArray } },
+                    { targetType: 'specific', targetEmails: email }
+                ]
+            });
         }
 
         const tasks = await Task.find(query);
@@ -53,6 +78,15 @@ router.post('/submit', async (req, res) => {
 
         const task = await Task.findById(taskId);
         if (!task) return res.status(404).json({ message: 'Task not found' });
+
+        // Check for deadline expiration
+        if (task.deadline) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (task.deadline < today) {
+                return res.status(400).json({ message: 'Mission has expired and can no longer be submitted.' });
+            }
+        }
 
         if (task.category === 'daily') {
             const today = new Date();
@@ -108,11 +142,13 @@ router.post('/submissions/:id/review', async (req, res) => {
     try {
         const { status, pointsAwarded, feedback, reviewedBy } = req.body;
         const submission = await TaskSubmission.findById(req.params.id);
-
         if (!submission) return res.status(404).json({ message: 'Submission not found' });
-        if (submission.status !== 'pending') return res.status(400).json({ message: 'Submission already reviewed' });
+
+        const task = await Task.findById(submission.taskId);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
 
         submission.status = status;
+        // Allow awarding more than reward (for bonuses)
         submission.pointsAwarded = pointsAwarded || 0;
         submission.feedback = feedback;
         submission.reviewedBy = reviewedBy;
@@ -121,27 +157,55 @@ router.post('/submissions/:id/review', async (req, res) => {
         await submission.save();
 
         if (status === 'approved') {
-            // Award User XP
-            if (pointsAwarded > 0) {
-                const user = await User.findById(submission.userId);
-                if (user) {
-                    user.points = (user.points || 0) + pointsAwarded;
-                    user.totalEarnedXP = (user.totalEarnedXP || 0) + pointsAwarded;
-                    user.weeklyXP = (user.weeklyXP || 0) + pointsAwarded;
-                    user.level = calculateLevelFromXP(user.totalEarnedXP);
-                    await user.save();
+            // Check for deadline expiration before awarding points
+            if (task.deadline) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (task.deadline < today) {
+                    return res.status(400).json({ message: 'Cannot approve an expired mission.' });
                 }
             }
 
-            // Award Club 5 points
-            const task = await Task.findById(submission.taskId);
-            if (task && task.clubId) {
-                await Club.findByIdAndUpdate(task.clubId, {
-                    $inc: {
-                        points: 5,
-                        monthlyPoints: 5
-                    }
+            // Award User XP (Fixed 25 per mission)
+            const user = await User.findById(submission.userId);
+            if (user) {
+                const xpAward = 25;
+                user.points = (user.points || 0) + xpAward;
+                user.totalEarnedXP = (user.totalEarnedXP || 0) + xpAward;
+                user.weeklyXP = (user.weeklyXP || 0) + xpAward;
+                user.level = calculateLevelFromXP(user.totalEarnedXP);
+
+                user.pointsHistory.push({
+                    amount: xpAward,
+                    reason: `Mission Approved: ${task.title}`,
+                    sourceId: task._id,
+                    sourceType: 'bonus', // Simple tasks are bonuses
+                    timestamp: new Date()
                 });
+
+                await user.save();
+                // Update submission record with fixed award
+                submission.pointsAwarded = xpAward;
+                await submission.save();
+            }
+
+            // Award Club 25 points (Checking/Approving)
+            if (task.clubId) {
+                const club = await Club.findById(task.clubId);
+                if (club) {
+                    club.points = (club.points || 0) + 25;
+                    club.monthlyPoints = (club.monthlyPoints || 0) + 25;
+
+                    club.pointsHistory.push({
+                        amount: 25,
+                        reason: `Reviewed student mission: ${task.title}`,
+                        sourceId: task._id,
+                        sourceType: 'bonus',
+                        timestamp: new Date()
+                    });
+
+                    await club.save();
+                }
             }
         }
 
@@ -157,6 +221,16 @@ router.post('/', async (req, res) => {
         const taskData = { ...req.body };
         if (taskData.college) taskData.college = taskData.college.trim();
 
+        // Validate deadline is not in the past
+        if (taskData.deadline) {
+            const deadlineDate = new Date(taskData.deadline);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (deadlineDate < today) {
+                return res.status(400).json({ message: 'Cannot deploy a mission with a past deadline.' });
+            }
+        }
+
         // If college not provided but clubId exists, fetch college from club
         if (!taskData.college && taskData.clubId) {
             const club = await Club.findById(taskData.clubId);
@@ -165,13 +239,11 @@ router.post('/', async (req, res) => {
             }
         }
 
-        const task = new Task(taskData);
+        const task = new Task({ ...taskData, points: 25 }); // Strictly 25 XP
         await task.save();
 
-        // Award Club 20 points if it's a club-related task created for a club
-        if (task.clubId && (task.category === 'club' || task.category === 'daily')) {
-            await Club.findByIdAndUpdate(task.clubId, { $inc: { points: 20, monthlyPoints: 20 } });
-        }
+        // REWARD DELAYED: Club coordination points are no longer awarded at creation.
+        // Rule: Only award rewards during verification/completion.
 
         res.status(201).json(task);
     } catch (err) {
@@ -179,16 +251,59 @@ router.post('/', async (req, res) => {
     }
 });
 
-// DELETE a task (Set status to inactive)
+// DELETE a task (Revoke Points)
 router.delete('/:id', async (req, res) => {
     try {
         const task = await Task.findById(req.params.id);
         if (!task) return res.status(404).json({ message: 'Task not found' });
 
-        task.status = 'inactive';
+        // ❌ REVOKE POINTS ON DELETION/DEACTIVATION
+        // Note: Creation points (25) are no longer awarded, so no deduction here.
+
+        // 2. Revoke Student XP and Club "Checking" points for all approved submissions
+        const approvedSubmissions = await TaskSubmission.find({ taskId: task._id, status: 'approved' });
+        for (const sub of approvedSubmissions) {
+            // Revoke Student XP (25)
+            const student = await User.findById(sub.userId);
+            if (student) {
+                student.points = Math.max(0, (student.points || 0) - 25);
+                student.totalEarnedXP = Math.max(0, (student.totalEarnedXP || 0) - 25);
+                student.level = calculateLevelFromXP(student.totalEarnedXP);
+
+                student.pointsHistory.push({
+                    amount: -25,
+                    reason: `Revoked: Mission "${task.title}" was deleted`,
+                    sourceId: task._id,
+                    sourceType: 'bonus',
+                    timestamp: new Date()
+                });
+
+                await student.save();
+            }
+            // Revoke Club "Checking" points (25)
+            if (task.clubId) {
+                const club = await Club.findById(task.clubId);
+                if (club) {
+                    club.points = Math.max(0, club.points - 25);
+                    club.monthlyPoints = Math.max(0, club.monthlyPoints - 25);
+
+                    club.pointsHistory.push({
+                        amount: -25,
+                        reason: `Revoked: Mission "${task.title}" (Evaluation points)`,
+                        sourceId: task._id,
+                        sourceType: 'bonus',
+                        timestamp: new Date()
+                    });
+
+                    await club.save();
+                }
+            }
+        }
+
+        task.status = 'inactive'; // Soft delete
         await task.save();
 
-        res.json({ message: 'Task marked as inactive' });
+        res.json({ message: 'Task deactivated and all associated points/XP have been revoked.' });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

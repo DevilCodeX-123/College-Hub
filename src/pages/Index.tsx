@@ -8,10 +8,11 @@ import { ChallengeSummary } from '@/components/dashboard/ChallengeSummary';
 import { EventSummary } from '@/components/dashboard/EventSummary';
 import { LeaderboardPreview } from '@/components/dashboard/LeaderboardPreview';
 import { ChallengeCard } from '@/components/challenges/ChallengeCard';
+import { EndedEventSummary } from '@/components/dashboard/EndedEventSummary';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { startOfDay, isAfter, format } from 'date-fns';
+import { startOfDay, isAfter, isBefore, format } from 'date-fns';
 import { api } from '@/lib/api';
 import { calculateLevelData } from '@/lib/leveling';
 
@@ -64,7 +65,7 @@ export default function Index() {
   // Fetch Events
   const { data: eventsData = [], isLoading: isLoadingEvents } = useQuery({
     queryKey: ['events'],
-    queryFn: api.getEvents,
+    queryFn: () => api.getEvents(),
   });
 
   const upcomingEvents = useMemo(() => {
@@ -73,6 +74,14 @@ export default function Index() {
     return rawEvents.filter((event: any) =>
       !event.isCompleted && (isAfter(new Date(event.date), today) || format(new Date(event.date), 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'))
     ).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 3);
+  }, [eventsData]);
+
+  const endedEvents = useMemo(() => {
+    const rawEvents = Array.isArray(eventsData) ? eventsData : [];
+    const today = startOfDay(new Date());
+    return rawEvents.filter((event: any) =>
+      event.isCompleted || (isBefore(new Date(event.date), today) && format(new Date(event.date), 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd'))
+    ).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 2);
   }, [eventsData]);
 
   const ongoingChallenges = useMemo(() => {
@@ -146,6 +155,8 @@ export default function Index() {
               />
 
               <EventSummary events={upcomingEvents} />
+
+              <EndedEventSummary events={endedEvents} />
 
               {/* Featured Challenge */}
               {featuredChallenge && (

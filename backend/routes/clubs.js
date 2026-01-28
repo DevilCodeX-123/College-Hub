@@ -26,19 +26,21 @@ router.get('/', async (req, res) => {
             query.college = { $regex: collegeFilter, $options: 'i' };
         }
 
-        // Use raw collection to bypass stale schema
-        const clubs = await Club.collection.find(query).toArray();
-
+        // Use standard find to benefit from Mongoose features, lean for performance
+        const clubs = await Club.find(query).lean();
 
         // Enhance clubs with actual member counts from User collection
         const enhancedClubs = await Promise.all(clubs.map(async (c) => {
+            const clubIdStr = c._id.toString();
+            // Match by both ObjectId and String to handle inconsistent data migrations
             const actualCount = await User.countDocuments({
-                joinedClubs: c._id.toString()
+                joinedClubs: { $in: [c._id, clubIdStr] }
             });
+            console.log(`[ClubCount] ${c.name} (${clubIdStr}): ${actualCount} members`);
             return {
                 ...c,
-                id: c._id.toString(),
-                memberCount: actualCount // Override with real-time count
+                id: clubIdStr,
+                memberCount: actualCount
             };
         }));
 
@@ -56,15 +58,13 @@ router.get('/coordinator/:userId', async (req, res) => {
 
         if (requestingUser && requestingUser.role === 'owner') {
             // Owner can see any club, default to the first one for testing purposes
-            // Use raw collection to bypass stale schema
-            const club = await Club.collection.findOne();
+            const club = await Club.findOne().lean();
             if (!club) return res.status(404).json({ message: 'No clubs found in system' });
             club.id = club._id.toString();
             return res.json(club);
         }
 
-        // Use raw collection to bypass stale schema
-        const club = await Club.collection.findOne({ coordinatorId: req.params.userId });
+        const club = await Club.findOne({ coordinatorId: req.params.userId }).lean();
         if (!club) {
             return res.status(404).json({ message: 'Club not found for this coordinator' });
         }
@@ -80,7 +80,7 @@ router.get('/coordinator/:userId', async (req, res) => {
 
         club.id = club._id.toString();
         // Accurate member count
-        const actualCount = await User.countDocuments({ joinedClubs: club.id });
+        const actualCount = await User.countDocuments({ joinedClubs: club._id });
         club.memberCount = actualCount;
         res.json(club);
     } catch (err) {
@@ -92,8 +92,7 @@ router.get('/coordinator/:userId', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { requestingUserId } = req.query;
-        const mongoose = require('mongoose');
-        const club = await Club.collection.findOne({ _id: new mongoose.Types.ObjectId(req.params.id) });
+        const club = await Club.findById(req.params.id).lean();
         if (!club) return res.status(404).json({ message: 'Club not found' });
 
 
@@ -109,9 +108,12 @@ router.get('/:id', async (req, res) => {
             }
         }
 
-        club.id = club._id.toString();
-        // Accurate member count
-        const actualCount = await User.countDocuments({ joinedClubs: club.id });
+        const clubIdStr = club._id.toString();
+        club.id = clubIdStr;
+        // Accurate member count - Check both formats
+        const actualCount = await User.countDocuments({
+            joinedClubs: { $in: [club._id, clubIdStr] }
+        });
         club.memberCount = actualCount;
         res.json(club);
     } catch (err) {
@@ -131,10 +133,14 @@ router.post('/', async (req, res) => {
         if (req.body.coordinatorId) {
             const User = require('../models/User');
             const coordinator = await User.findById(req.body.coordinatorId);
-            if (coordinator && !coordinator.joinedClubs.includes(club._id.toString())) {
-                coordinator.joinedClubs.push(club._id.toString());
-                await coordinator.save();
-                club.memberCount = 1; // Initialize count
+            if (coordinator) {
+                const clubIdStr = club._id.toString();
+                const isAlreadyJoined = coordinator.joinedClubs.some(cid => cid.toString() === clubIdStr);
+                if (!isAlreadyJoined) {
+                    coordinator.joinedClubs.push(club._id);
+                    await coordinator.save();
+                    club.memberCount = 1; // Initialize count
+                }
             }
         }
 
@@ -165,6 +171,9 @@ router.put('/:id', async (req, res) => {
 
         const formattedClub = club.toObject();
         formattedClub.id = club._id.toString();
+
+        // Trigger Auto-Sync for member count and coordinator name
+        await syncClubMetadata(club._id);
 
         res.json(formattedClub);
     } catch (err) {
@@ -220,10 +229,25 @@ router.post('/:id/approve-join/:userId', async (req, res) => {
         club.memberCount += 1;
         await club.save();
 
-        if (!user.joinedClubs.includes(req.params.id)) {
-            user.joinedClubs.push(req.params.id);
-            await user.save();
+        if (user) {
+            const clubIdStr = club._id.toString();
+            const isAlreadyJoined = user.joinedClubs.some(cid => cid.toString() === clubIdStr);
+            if (!isAlreadyJoined) {
+                user.joinedClubs.push(club._id);
+                // Add to user activity
+                user.activity.push({
+                    type: 'club',
+                    refId: club._id,
+                    title: club.name,
+                    status: 'joined',
+                    timestamp: new Date()
+                });
+                await user.save();
+            }
         }
+
+        // Trigger Auto-Sync
+        await syncClubMetadata(club._id);
 
         res.json({ message: 'Join request approved', club });
     } catch (err) {
@@ -258,13 +282,11 @@ router.post('/:id/remove-member', async (req, res) => {
         if (!club || !user) return res.status(404).json({ message: 'Club or User not found' });
 
         // Remove from User's joinedClubs
-        if (user.joinedClubs.includes(req.params.id)) {
-            user.joinedClubs = user.joinedClubs.filter(id => id.toString() !== req.params.id);
-            await user.save();
-        }
+        const clubIdStr = club._id.toString();
+        user.joinedClubs = user.joinedClubs.filter(id => id.toString() !== clubIdStr);
+        await user.save();
 
-        // Decrement Club member count
-        // We assume memberCount is accurate or we might want to recalculate it from Users count, but simple decrement is faster
+        // Decrement Club member count (Basic decrement, will be fixed by sync)
         if (club.memberCount > 0) {
             club.memberCount -= 1;
         }
@@ -273,6 +295,9 @@ router.post('/:id/remove-member', async (req, res) => {
         club.coreTeam = club.coreTeam.filter(m => m.userId !== userId);
 
         await club.save();
+
+        // Trigger Auto-Sync
+        await syncClubMetadata(club._id);
 
         res.json({ message: 'Member removed successfully', club });
     } catch (err) {
@@ -296,10 +321,21 @@ router.post('/:id/join', async (req, res) => {
         }
 
         user.joinedClubs.push(req.params.id);
+        // Add to user activity
+        user.activity.push({
+            type: 'club',
+            refId: club._id,
+            title: club.name,
+            status: 'joined',
+            timestamp: new Date()
+        });
         await user.save();
 
         club.memberCount += 1;
         await club.save();
+
+        // Trigger Auto-Sync
+        await syncClubMetadata(club._id);
 
         res.json({ user, club });
     } catch (err) {
@@ -427,6 +463,47 @@ router.delete('/:id/achievements/:itemId', async (req, res) => {
     }
 });
 
+// Helper to sync club metadata (Count & Coordinator)
+async function syncClubMetadata(clubId) {
+    try {
+        const Club = require('../models/Club');
+        const User = require('../models/User');
+
+        const club = await Club.findById(clubId);
+        if (!club) return;
+
+        // 1. Recalculate Member Count
+        const clubIdStr = club._id.toString();
+        const memberCount = await User.countDocuments({
+            joinedClubs: { $in: [club._id, clubIdStr] }
+        });
+        club.memberCount = memberCount;
+
+        // 2. Sync Coordinator Name
+        // Find the user who is 'club_coordinator' or 'club_head' in the coreTeam
+        // Priority: Coordinator > Head > First Core Member
+        let coordinatorName = club.coordinator;
+
+        // Check Core Team array first
+        const coordinatorObj = club.coreTeam.find(m => m.role === 'club_coordinator') ||
+            club.coreTeam.find(m => m.role === 'club_head');
+
+        if (coordinatorObj) {
+            coordinatorName = coordinatorObj.name;
+            club.coordinatorId = coordinatorObj.userId;
+        } else {
+            // Fallback: Check Users collection for anyone with this club and coordinator role
+            // This is expensive so we rely mostly on coreTeam
+        }
+
+        club.coordinator = coordinatorName;
+        await club.save();
+        console.log(`[Sync] Club ${club.name} synced: ${memberCount} members, Coord: ${coordinatorName}`);
+    } catch (e) {
+        console.error("[Sync] Error syncing club metadata:", e);
+    }
+}
+
 // MANAGE Core Team Member (Upsert)
 router.post('/:id/core-team', async (req, res) => {
     try {
@@ -454,45 +531,46 @@ router.post('/:id/core-team', async (req, res) => {
             const requesterPower = ROLE_HIERARCHY[requester.role] || 0;
             const newRolePower = ROLE_HIERARCHY[role] || 0;
 
-            // 1. Bubble Isolation: Non-owners can only manage their own club/college
+            // 1. Bubble Isolation
             if (requester.role !== 'owner') {
                 if (requester.role === 'admin') {
-                    // Admin must be in same college as club
                     const userCollege = requester.college ? requester.college.trim().toLowerCase() : '';
                     const clubCollege = club.college ? club.college.trim().toLowerCase() : '';
-
-                    if (userCollege !== clubCollege) {
-                        return res.status(403).json({ message: 'Access Denied: This club belongs to a different college bubble' });
-                    }
+                    if (userCollege !== clubCollege) return res.status(403).json({ message: 'Access Denied: College mismatch' });
                 } else {
-                    // Coordinator/Secretary must be explicitly assigned to this club
                     const isCoordinatingThisClub = club.coordinatorId?.toString() === requestingUserId;
                     const isHeadOfThisClub = club.coreTeam.some(m => m.userId === requestingUserId && m.role === 'club_head');
-
-                    if (!isCoordinatingThisClub && !isHeadOfThisClub) {
-                        return res.status(403).json({ message: 'Access Denied: You do not manage this club bubble' });
-                    }
+                    if (!isCoordinatingThisClub && !isHeadOfThisClub) return res.status(403).json({ message: 'Access Denied: Not a manager' });
                 }
             }
 
-            // 2. Hierarchy Check: Can only assign roles strictly LOWER than own
+            // 2. Hierarchy Check
             if (requester.role !== 'owner' && newRolePower >= requesterPower) {
-                return res.status(403).json({ message: 'Insufficient permission to assign this role (Hierarchy Violation)' });
+                return res.status(403).json({ message: 'Insufficient permission (Hierarchy Violation)' });
             }
         }
 
-        // Enforce Single Club Secretary
+        // Handle Coordinator Replacement
+        if (role === 'club_coordinator') {
+            // Downgrade existing coordinator if exists
+            const existingCoord = club.coreTeam.find(m => m.role === 'club_coordinator');
+            if (existingCoord) {
+                existingCoord.role = 'core_member';
+                await User.findByIdAndUpdate(existingCoord.userId, { role: 'core_member' });
+            }
+        }
+
+        // Enforce Single Club Head
         if (role === 'club_head') {
             const existingHead = club.coreTeam.find(m => m.role === 'club_head' && m.userId !== userId);
             if (existingHead) {
-                // Demote existing head to core_member
                 existingHead.role = 'core_member';
-                existingHead.customTitle = 'Former Secretary';
+                existingHead.customTitle = 'Former Head';
                 await User.findByIdAndUpdate(existingHead.userId, { role: 'core_member' });
             }
         }
 
-        // Update User Role globally if they are being promoted to a management role
+        // Update User Role
         user.role = role;
         await user.save();
 
@@ -506,13 +584,17 @@ router.post('/:id/core-team', async (req, res) => {
         });
 
         await club.save();
+
+        // Trigger Auto-Sync
+        await syncClubMetadata(club._id);
+
         res.json({ message: 'Core team updated', club });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 });
 
-// REMOVE Core Team Member (Demote to Club Member)
+// REMOVE Core Team Member
 router.delete('/:id/core-team/:userId', async (req, res) => {
     try {
         const User = require('../models/User');
@@ -521,15 +603,16 @@ router.delete('/:id/core-team/:userId', async (req, res) => {
 
         if (!club || !user) return res.status(404).json({ message: 'Club or User not found' });
 
-        // Update User Role to club_member
         user.role = 'club_member';
         await user.save();
 
-        // Remove from Club Core Team Array
         club.coreTeam = club.coreTeam.filter(m => m.userId !== req.params.userId);
-
         await club.save();
-        res.json({ message: 'Member demoted to regular member', club });
+
+        // Trigger Auto-Sync
+        await syncClubMetadata(club._id);
+
+        res.json({ message: 'Member demoted', club });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

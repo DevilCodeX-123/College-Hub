@@ -141,7 +141,6 @@ export function CreateClubDialog({ open, onClose, collegeName, collegeUsers }: C
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="Technology">Technology</SelectItem>
-                                <SelectItem value="Technical">Technical</SelectItem>
                                 <SelectItem value="Business">Business</SelectItem>
                                 <SelectItem value="Creative">Creative</SelectItem>
                                 <SelectItem value="Cultural">Cultural</SelectItem>

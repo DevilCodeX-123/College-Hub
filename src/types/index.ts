@@ -39,6 +39,8 @@ export interface Badge {
   name: string;
   icon: string;
   description: string;
+  challengeName?: string;
+  clubName?: string;
   earnedAt: Date;
 }
 
@@ -51,6 +53,7 @@ export interface Club {
   coverImage?: string;
   memberCount: number;
   category: string;
+  college: string;
   coordinator: string;
   coordinatorId?: string;
   socialLinks: {
@@ -143,9 +146,11 @@ export interface Challenge {
 
 export interface Project {
   id: string;
+  _id?: string;
   title: string;
   description: string;
   type: string;
+  teamName?: string;
   memberLimit: number;
   problemStatement: string;
   idea: string;
@@ -157,6 +162,39 @@ export interface Project {
   team: string[];
   deadline: Date;
   status: 'pending' | 'in_progress' | 'completed' | 'on_hold' | 'rejected';
+  joinRequests?: {
+    _id: string;
+    user: string | { id: string; _id: string; name: string };
+    reason: string;
+    skills: string;
+    experiences: string;
+    comments: string;
+    status: 'pending' | 'accepted' | 'rejected';
+    createdAt: string;
+  }[];
+  timeGoals?: {
+    id: string;
+    _id: string;
+    title: string;
+    description: string;
+    deadline: string;
+    status: 'pending' | 'submitted' | 'approved' | 'rejected';
+    assignedType: 'all' | 'specific';
+    assignees: string[];
+    submissionLink?: string;
+    submissionTitle?: string;
+    submissionDescription?: string;
+    submissionKey?: string;
+    completedAt?: string;
+  }[];
+  resources?: {
+    title: string;
+    description: string;
+    url: string;
+    addedBy: string;
+    addedByName: string;
+    addedAt: string;
+  }[];
 }
 
 export interface LeaderboardEntry {
@@ -190,11 +228,45 @@ export interface DailyTask {
 
 export interface Event {
   id: string;
+  _id?: string;
   title: string;
-  date: Date;
+  date: Date | string;
   clubId: string;
   clubName: string;
-  type: 'workshop' | 'competition' | 'meetup' | 'hackathon';
+  type?: 'workshop' | 'competition' | 'meetup' | 'hackathon';
+  category?: string;
+  description?: string;
+  coverImage?: string;
+  location?: string;
+  duration?: string;
+  time?: string;
+  organizingClub?: string;
+  isCompleted?: boolean;
+  xpReward?: number;
+  stopRegistration?: boolean;
+  paymentQRCode?: string;
+  paymentAmountIndividual?: number;
+  paymentAmountTeam?: number;
+  programs?: string[];
+  registrations?: {
+    userId: string;
+    name: string;
+    email: string;
+    registrationType: 'individual' | 'team';
+    program?: string;
+    teamMembers?: { name: string; email: string }[];
+    paymentProofUrl?: string;
+    transactionId?: string;
+    status: 'pending' | 'approved' | 'rejected';
+    createdAt: string;
+  }[];
+  winners?: {
+    userId: string;
+    name: string;
+    competition: string;
+    rank: number;
+    score: number;
+  }[];
 }
 
 export interface Note {
@@ -220,3 +292,14 @@ export interface CampusLocation {
   uploadedBy: string | User;
   createdAt: Date;
 }
+
+export interface TeamChatMessage {
+  id: string;
+  _id?: string;
+  teamId: string;
+  senderId: string;
+  senderName: string;
+  message: string;
+  timestamp: Date | string;
+}
+

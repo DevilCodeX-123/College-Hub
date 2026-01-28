@@ -71,11 +71,11 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
         chiefGuests: [] as { name: string; designation: string }[],
         competitions: [] as string[],
         driveLink: '',
-        winners: [] as { name: string; position: string; prize: string }[],
+        winners: [] as { name: string; position: string; prize: string; competition?: string }[],
         location: '',
         duration: '',
         participantCount: '',
-        scope: 'Club',
+        scope: 'Club Level',
         coverImage: ''
     });
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -92,7 +92,10 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
         location: '',
         coverImage: '',
         programs: [] as string[],
-        xpReward: 50
+        xpReward: 50,
+        paymentQRCode: '',
+        paymentAmountIndividual: '',
+        paymentAmountTeam: ''
     });
     const [newProgram, setNewProgram] = useState('');
 
@@ -101,6 +104,19 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
     const [newChiefGuest, setNewChiefGuest] = useState({ name: '', designation: '' });
     const [newWinner, setNewWinner] = useState({ name: '', position: '', prize: '' });
     const [newCompetition, setNewCompetition] = useState('');
+    const [groupedComp, setGroupedComp] = useState({
+        name: '',
+        individualWinners: [
+            { position: '1st', name: '', prize: '' },
+            { position: '2nd', name: '', prize: '' },
+            { position: '3rd', name: '', prize: '' }
+        ],
+        teamWinners: [
+            { position: '1st', name: '', prize: '' },
+            { position: '2nd', name: '', prize: '' },
+            { position: '3rd', name: '', prize: '' }
+        ]
+    });
 
     // Active Announcements Viewing
     const [viewRegistrationsEvent, setViewRegistrationsEvent] = useState<any>(null);
@@ -111,13 +127,38 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
         queryFn: () => api.getEvents(user?.college || ''),
     });
 
-    const activeAnnouncements = allEvents.filter((event: any) =>
-        event.clubId === (club._id || club.id) && !event.isCompleted
+    // Fetch registrations for the completing event to populate dropdowns
+    const [completingEventRegistrations, setCompletingEventRegistrations] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (completingEventId) {
+            const ev = allEvents.find((e: any) => e._id === completingEventId || e.id === completingEventId);
+            if (ev && ev.registrations) {
+                setCompletingEventRegistrations(ev.registrations);
+                // Auto-fill and lock participant count if registrations exist
+                if (ev.registrations.length > 0) {
+                    setEventReport(prev => ({
+                        ...prev,
+                        participantCount: ev.registrations.length.toString()
+                    }));
+                }
+            } else {
+                setCompletingEventRegistrations([]);
+            }
+        }
+    }, [completingEventId, allEvents]);
+
+    const activeAnnouncements = (allEvents || []).filter((event: any) =>
+        event && event.clubId === (club?._id || club?.id) && !event.isCompleted
+    );
+
+    const pastEvents = (allEvents || []).filter((event: any) =>
+        event && event.clubId === (club?._id || club?.id) && event.isCompleted
     );
 
     useEffect(() => {
-        api.getClubs().then(setAllClubs).catch(console.error);
-    }, []);
+        api.getClubs(user?.college).then(setAllClubs).catch(console.error);
+    }, [user?.college]);
 
     const updateClubMutation = useMutation({
         mutationFn: (data: any) => api.updateClub(club._id || club.id, data),
@@ -125,6 +166,7 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
             queryClient.invalidateQueries({ queryKey: ['clubs'] });
             queryClient.invalidateQueries({ queryKey: ['college-clubs'] });
             queryClient.invalidateQueries({ queryKey: ['my-club'] });
+            queryClient.invalidateQueries({ queryKey: ['events'] });
             toast({ title: 'Club updated successfully!' });
         },
         onError: (error: any) => {
@@ -157,12 +199,9 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
             updateEventMutation.mutate({
                 id: completingEventId,
                 data: {
-                    title: eventReport.title,
-                    date: eventReport.date,
-                    description: eventReport.description,
-                    location: eventReport.location,
-                    type: eventReport.type,
-                    coverImage: eventReport.coverImage,
+                    ...eventReport,
+                    organizingClub: club.name, // Ensure it's always the current club
+                    highlightsLink: eventReport.driveLink, // Map for backend compatibility
                     participantCount: parseInt(eventReport.participantCount) || 0
                 }
             });
@@ -184,7 +223,7 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
             setEventReport({
                 title: '', date: '', type: 'meetup', description: '', link: '',
                 organizingClub: club?.name || '', collaboratingClubs: [], chiefGuests: [], competitions: [],
-                driveLink: '', winners: [], location: '', duration: '', participantCount: '', scope: 'Club',
+                driveLink: '', winners: [], location: '', duration: '', participantCount: '', scope: 'Club Level',
                 coverImage: ''
             });
             toast({
@@ -202,6 +241,39 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
         }
     });
 
+    const deleteEventMutation = useMutation({
+        mutationFn: (id: string) => api.deleteEvent(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+            queryClient.invalidateQueries({ queryKey: ['clubs'] });
+            queryClient.invalidateQueries({ queryKey: ['my-club'] });
+            toast({ title: 'Event record deleted permanently' });
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Deletion failed',
+                description: error.response?.data?.message || 'Unauthorized or server error',
+                variant: 'destructive'
+            });
+        }
+    });
+
+    const createEventManualMutation = useMutation({
+        mutationFn: (data: any) => api.createEvent({
+            ...data,
+            clubId: club._id || club.id,
+            clubName: club.name,
+            college: user?.college,
+            isCompleted: true,
+            stopRegistration: true
+        }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+            queryClient.invalidateQueries({ queryKey: ['clubs'] });
+            queryClient.invalidateQueries({ queryKey: ['my-club'] });
+        }
+    });
+
     const handleAddEventReport = () => {
         if (!eventReport.title || !eventReport.date) {
             toast({
@@ -214,12 +286,18 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
 
         const newItem = {
             ...eventReport,
+            organizingClub: club.name, // Ensure it's always the host club
+            highlightsLink: eventReport.driveLink, // Map for backend compatibility
             participantCount: parseInt(eventReport.participantCount) || 0
         };
 
         if (completingEventId) {
             completeEventMutation.mutate(newItem);
         } else if (editingId) {
+            // 1. Update the Event document in the Global Registry
+            updateEventMutation.mutate({ id: editingId, data: newItem });
+
+            // 2. Keep the legacy club history in sync
             const updatedHistory = history.map((item: any) =>
                 item._id === editingId ? { ...newItem, _id: editingId } : item
             );
@@ -228,28 +306,68 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                     setIsAddingEvent(false);
                     setEditingId(null);
                     setEventReport({
-                        title: '', date: '', type: 'event', description: '', link: '',
+                        title: '', date: '', type: 'meetup', description: '', link: '',
                         organizingClub: club?.name || '', collaboratingClubs: [], chiefGuests: [], competitions: [],
-                        driveLink: '', winners: [], location: '', duration: '', participantCount: '', scope: 'Club',
+                        driveLink: '', winners: [], location: '', duration: '', participantCount: '', scope: 'Club Level',
                         coverImage: ''
                     });
                 }
             });
         } else {
+            // Manual entry - create in global registry AND club history
+            createEventManualMutation.mutate(newItem);
+
             const updatedHistory = [...history, { ...newItem, _id: Date.now().toString() }];
             updateClubMutation.mutate({ history: updatedHistory }, {
                 onSuccess: () => {
                     setIsAddingEvent(false);
                     setEditingId(null);
                     setEventReport({
-                        title: '', date: '', type: 'event', description: '', link: '',
+                        title: '', date: '', type: 'meetup', description: '', link: '',
                         organizingClub: club?.name || '', collaboratingClubs: [], chiefGuests: [], competitions: [],
-                        driveLink: '', winners: [], location: '', duration: '', participantCount: '', scope: 'Club',
+                        driveLink: '', winners: [], location: '', duration: '', participantCount: '', scope: 'Club Level',
                         coverImage: ''
                     });
+                    toast({ title: 'Event record saved successfully!' });
                 }
             });
         }
+    };
+
+    const handleAddGroupedCompetition = () => {
+        if (!groupedComp.name.trim()) return toast({ title: "Please enter competition name" });
+
+        const winnersToAdd = [
+            ...groupedComp.individualWinners
+                .filter(w => w.name.trim() !== '')
+                .map(w => ({ ...w, competition: groupedComp.name.trim(), isTeam: false })),
+            ...groupedComp.teamWinners
+                .filter(w => w.name.trim() !== '')
+                .map(w => ({ ...w, competition: groupedComp.name.trim(), isTeam: true }))
+        ];
+
+        if (winnersToAdd.length === 0) return toast({ title: "Please add at least one winner" });
+
+        setEventReport(prev => ({
+            ...prev,
+            competitions: [...prev.competitions, groupedComp.name.trim()],
+            winners: [...prev.winners, ...winnersToAdd]
+        }));
+
+        setGroupedComp({
+            name: '',
+            individualWinners: [
+                { position: '1st', name: '', prize: '' },
+                { position: '2nd', name: '', prize: '' },
+                { position: '3rd', name: '', prize: '' }
+            ],
+            teamWinners: [
+                { position: '1st', name: '', prize: '' },
+                { position: '2nd', name: '', prize: '' },
+                { position: '3rd', name: '', prize: '' }
+            ]
+        });
+        toast({ title: 'Competition and winners added!' });
     };
 
     const handleEditClick = (item: any) => {
@@ -264,12 +382,12 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
             collaboratingClubs: item.collaboratingClubs || [],
             chiefGuests: item.chiefGuests || [],
             competitions: item.competitions || [],
-            driveLink: item.driveLink || '',
+            driveLink: item.driveLink || item.highlightsLink || '',
             winners: item.winners || [],
             location: item.location || '',
             duration: item.duration || '',
             participantCount: item.participantCount?.toString() || '',
-            scope: item.scope || 'Club',
+            scope: item.scope === 'Club' ? 'Club Level' : (item.scope || 'Club Level'),
             coverImage: item.coverImage || ''
         });
         setIsAddingEvent(true);
@@ -283,14 +401,20 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
         setEventReport({
             title: '', date: '', type: 'meetup', description: '', link: '',
             organizingClub: club?.name || '', collaboratingClubs: [], chiefGuests: [], competitions: [],
-            driveLink: '', winners: [], location: '', duration: '', participantCount: '', scope: 'Club',
+            driveLink: '', winners: [], location: '', duration: '', participantCount: '', scope: 'Club Level',
             coverImage: ''
         });
     };
 
     const handleDeleteHistory = (id: string) => {
-        const updatedHistory = history.filter((h: any) => h._id !== id);
-        updateClubMutation.mutate({ history: updatedHistory });
+        if (window.confirm("Are you absolutely sure you want to delete this event record? This action is permanent and will remove the record from both the club history and the global events registry.")) {
+            // 1. Delete the Event document from the registry
+            deleteEventMutation.mutate(id);
+
+            // 2. Remove from the Club's internal history array if it exists there
+            const updatedHistory = history.filter((h: any) => h._id !== id);
+            updateClubMutation.mutate({ history: updatedHistory });
+        }
     };
 
     const handleAnnounceEvent = async () => {
@@ -308,13 +432,16 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                 ...announcement,
                 clubId: club._id || club.id,
                 clubName: club.name,
-                college: user?.college
+                college: user?.college,
+                paymentAmountIndividual: announcement.paymentAmountIndividual ? parseInt(announcement.paymentAmountIndividual) : undefined,
+                paymentAmountTeam: announcement.paymentAmountTeam ? parseInt(announcement.paymentAmountTeam) : undefined
             });
             toast({ title: 'Event announced successfully!' });
             setIsAnnouncingEvent(false);
             setAnnouncement({
                 title: '', date: '', type: 'meetup', description: '', location: '',
-                coverImage: '', programs: [], xpReward: 50
+                coverImage: '', programs: [], xpReward: 50,
+                paymentQRCode: '', paymentAmountIndividual: '', paymentAmountTeam: ''
             });
         } catch (error: any) {
             toast({
@@ -372,9 +499,9 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label>Date</Label>
                                 <Input
                                     type="date"
+                                    min={new Date().toISOString().split('T')[0]}
                                     value={announcement.date}
                                     onChange={(e) => setAnnouncement({ ...announcement, date: e.target.value })}
                                 />
@@ -448,12 +575,54 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label>XP Reward for Participating</Label>
+                                <Label className="flex justify-between">
+                                    XP Reward
+                                    <span className="text-[10px] text-muted-foreground uppercase font-mono">Standard Attendance</span>
+                                </Label>
                                 <Input
                                     type="number"
-                                    value={announcement.xpReward}
-                                    onChange={(e) => setAnnouncement({ ...announcement, xpReward: parseInt(e.target.value) || 0 })}
+                                    value={100}
+                                    readOnly
+                                    className="bg-muted font-bold"
                                 />
+                            </div>
+                        </div>
+
+                        {/* Payment Configuration (Optional) */}
+                        <div className="space-y-3 border-2 border-dashed border-amber-200 rounded-lg p-4 bg-amber-50/30">
+                            <Label className="flex items-center gap-2 text-amber-700 font-bold">
+                                💳 Payment Configuration (Optional)
+                            </Label>
+                            <p className="text-xs text-amber-600">If payment is required, add QR code and amounts below. Leave blank for free events.</p>
+
+                            <div className="space-y-2">
+                                <Label className="text-xs">Payment QR Code URL</Label>
+                                <Input
+                                    value={announcement.paymentQRCode}
+                                    onChange={(e) => setAnnouncement({ ...announcement, paymentQRCode: e.target.value })}
+                                    placeholder="https://your-qr-code-image-url.png"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs">Amount for Individual (₹)</Label>
+                                    <Input
+                                        type="number"
+                                        value={announcement.paymentAmountIndividual}
+                                        onChange={(e) => setAnnouncement({ ...announcement, paymentAmountIndividual: e.target.value })}
+                                        placeholder="e.g. 100"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs">Amount for Team (₹)</Label>
+                                    <Input
+                                        type="number"
+                                        value={announcement.paymentAmountTeam}
+                                        onChange={(e) => setAnnouncement({ ...announcement, paymentAmountTeam: e.target.value })}
+                                        placeholder="e.g. 300"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -512,11 +681,29 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                             <div className="space-y-2">
                                 <Label>Organized By</Label>
                                 <Input
-                                    value={eventReport.organizingClub}
-                                    onChange={(e) => setEventReport({ ...eventReport, organizingClub: e.target.value })}
-                                    placeholder="Club Name"
+                                    value={club.name}
+                                    readOnly
+                                    className="bg-slate-50 border-2 font-black text-primary pointer-events-none"
                                 />
                             </div>
+                            <div className="space-y-2">
+                                <Label>Participant Count {completingEventId && completingEventRegistrations.length > 0 && <span className="text-emerald-600 text-[10px] ml-2">(Verified)</span>}</Label>
+                                <Input
+                                    value={completingEventId && completingEventRegistrations.length > 0 ? completingEventRegistrations.length.toString() : eventReport.participantCount}
+                                    readOnly={!!(completingEventId && completingEventRegistrations.length > 0)}
+                                    onChange={(e) => setEventReport({ ...eventReport, participantCount: e.target.value })}
+                                    className={`${completingEventId && completingEventRegistrations.length > 0 ? 'bg-slate-100 font-bold text-slate-600 cursor-not-allowed' : ''}`}
+                                    placeholder="Approx count"
+                                />
+                                {completingEventId && completingEventRegistrations.length > 0 && (
+                                    <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                                        Locked to verified registrations
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Scope</Label>
                                 <Select
@@ -527,8 +714,8 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="Club">Club Level</SelectItem>
-                                        <SelectItem value="College">College Level</SelectItem>
+                                        <SelectItem value="Club Level">Club Level</SelectItem>
+                                        <SelectItem value="College Level">College Level</SelectItem>
                                         <SelectItem value="Inter-College">Inter-College</SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -588,28 +775,31 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                         <CommandEmpty>No club found.</CommandEmpty>
                                         <CommandList>
                                             <CommandGroup>
-                                                {allClubs.filter(c => c.name !== club.name && !eventReport.collaboratingClubs.includes(c.name)).map((c: any) => (
-                                                    <CommandItem
-                                                        key={c._id || c.id}
-                                                        value={c.name}
-                                                        onSelect={(currentValue) => {
-                                                            setEventReport({
-                                                                ...eventReport,
-                                                                collaboratingClubs: [...eventReport.collaboratingClubs, currentValue]
-                                                            });
-                                                            setOpenCombobox(false);
-                                                        }}
-                                                    >
-                                                        <Check
-                                                            className={
-                                                                eventReport.collaboratingClubs.includes(c.name)
-                                                                    ? "mr-2 h-4 w-4 opacity-100"
-                                                                    : "mr-2 h-4 w-4 opacity-0"
-                                                            }
-                                                        />
-                                                        {c.name}
-                                                    </CommandItem>
-                                                ))}
+                                                {(allClubs || []).filter(c => c && c.name !== club?.name).map((c: any) => {
+                                                    const isSelected = eventReport.collaboratingClubs?.includes(c.name);
+                                                    return (
+                                                        <CommandItem
+                                                            key={c._id || c.id}
+                                                            value={c.name}
+                                                            onSelect={() => {
+                                                                const newCollaborators = isSelected
+                                                                    ? eventReport.collaboratingClubs.filter(name => name !== c.name)
+                                                                    : [...eventReport.collaboratingClubs, c.name];
+                                                                setEventReport({
+                                                                    ...eventReport,
+                                                                    collaboratingClubs: newCollaborators
+                                                                });
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={
+                                                                    isSelected ? "mr-2 h-4 w-4 opacity-100 text-primary" : "mr-2 h-4 w-4 opacity-0"
+                                                                }
+                                                            />
+                                                            <span className={isSelected ? "font-bold text-primary" : ""}>{c.name}</span>
+                                                        </CommandItem>
+                                                    );
+                                                })}
                                             </CommandGroup>
                                         </CommandList>
                                     </Command>
@@ -680,126 +870,208 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                 className="min-h-[100px]"
                             />
                         </div>
+                        <div className="space-y-4 border-2 border-primary/10 rounded-xl p-5 bg-primary/5">
+                            <div className="flex items-center gap-2 mb-2 font-bold text-primary">
+                                <Trophy className="h-5 w-5" /> Add Competition Result
+                            </div>
 
-                        <div className="space-y-3 border rounded-md p-3 bg-muted/20">
-                            <Label className="flex items-center gap-2 mb-2"><Trophy className="h-4 w-4 text-purple-500" /> Competitions Held</Label>
-                            <div className="flex gap-2">
-                                <Input
-                                    placeholder="Competition Name (e.g. Coding Quiz)"
-                                    value={newCompetition}
-                                    onChange={(e) => setNewCompetition(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            if (newCompetition.trim()) {
-                                                setEventReport({
-                                                    ...eventReport,
-                                                    competitions: [...eventReport.competitions, newCompetition.trim()]
-                                                });
-                                                setNewCompetition('');
-                                            }
-                                        }
-                                    }}
-                                />
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Competition Name</Label>
+                                    <Input
+                                        placeholder="e.g. Coding Competition, Dance Battle..."
+                                        value={groupedComp.name}
+                                        onChange={(e) => setGroupedComp({ ...groupedComp, name: e.target.value })}
+                                        className="bg-white"
+                                    />
+                                </div>
+
+                                {/* Individual Winners Section */}
+                                <div className="space-y-3 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
+                                    <Label className="text-xs uppercase tracking-wider font-bold text-blue-700 flex items-center gap-2">
+                                        👤 Individual Winners (Top 3)
+                                    </Label>
+                                    {groupedComp.individualWinners.map((w, idx) => (
+                                        <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-white p-2 rounded-lg border shadow-sm">
+                                            <div className="col-span-1 text-center font-black text-lg">
+                                                {w.position === '1st' ? '🥇' : w.position === '2nd' ? '🥈' : '🥉'}
+                                            </div>
+                                            <div className="col-span-6">
+                                                {completingEventId && completingEventRegistrations.length > 0 ? (
+                                                    <Select
+                                                        value={w.name}
+                                                        onValueChange={(val) => {
+                                                            const newWinners = [...groupedComp.individualWinners];
+                                                            newWinners[idx].name = val;
+                                                            setGroupedComp({ ...groupedComp, individualWinners: newWinners });
+                                                        }}
+                                                    >
+                                                        <SelectTrigger className="h-8 text-sm">
+                                                            <SelectValue placeholder="Select Individual" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {completingEventRegistrations
+                                                                .filter((reg: any) => !reg.teamMembers || reg.teamMembers.length === 0)
+                                                                .map((reg: any) => {
+                                                                    const isSelectedElsewhere = groupedComp.individualWinners.some((winner, winnerIdx) => winnerIdx !== idx && winner.name === reg.name);
+                                                                    return (
+                                                                        <SelectItem
+                                                                            key={reg.userId || reg._id}
+                                                                            value={reg.name}
+                                                                            disabled={isSelectedElsewhere}
+                                                                        >
+                                                                            {reg.name} (Individual)
+                                                                        </SelectItem>
+                                                                    );
+                                                                })}
+                                                        </SelectContent>
+                                                    </Select>
+                                                ) : (
+                                                    <Input
+                                                        placeholder="Individual Name"
+                                                        value={w.name}
+                                                        onChange={(e) => {
+                                                            const newWinners = [...groupedComp.individualWinners];
+                                                            newWinners[idx].name = e.target.value;
+                                                            setGroupedComp({ ...groupedComp, individualWinners: newWinners });
+                                                        }}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="col-span-5">
+                                                <Input
+                                                    placeholder="Prize (e.g. $100 / Gold)"
+                                                    value={w.prize}
+                                                    onChange={(e) => {
+                                                        const newWinners = [...groupedComp.individualWinners];
+                                                        newWinners[idx].prize = e.target.value;
+                                                        setGroupedComp({ ...groupedComp, individualWinners: newWinners });
+                                                    }}
+                                                    className="h-8 text-sm"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Team Winners Section */}
+                                <div className="space-y-3 bg-purple-50/50 p-3 rounded-lg border border-purple-100">
+                                    <Label className="text-xs uppercase tracking-wider font-bold text-purple-700 flex items-center gap-2">
+                                        👥 Team Winners (Top 3)
+                                    </Label>
+                                    {groupedComp.teamWinners.map((w, idx) => (
+                                        <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-white p-2 rounded-lg border shadow-sm">
+                                            <div className="col-span-1 text-center font-black text-lg">
+                                                {w.position === '1st' ? '🥇' : w.position === '2nd' ? '🥈' : '🥉'}
+                                            </div>
+                                            <div className="col-span-6">
+                                                {completingEventId && completingEventRegistrations.length > 0 ? (
+                                                    <Select
+                                                        value={w.name}
+                                                        onValueChange={(val) => {
+                                                            const newWinners = [...groupedComp.teamWinners];
+                                                            newWinners[idx].name = val;
+                                                            setGroupedComp({ ...groupedComp, teamWinners: newWinners });
+                                                        }}
+                                                    >
+                                                        <SelectTrigger className="h-8 text-sm">
+                                                            <SelectValue placeholder="Select Team Lead" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {completingEventRegistrations
+                                                                .filter((reg: any) => reg.teamMembers && reg.teamMembers.length > 0)
+                                                                .map((reg: any) => {
+                                                                    const isSelectedElsewhere = groupedComp.teamWinners.some((winner, winnerIdx) => winnerIdx !== idx && winner.name === reg.name);
+                                                                    return (
+                                                                        <SelectItem
+                                                                            key={reg.userId || reg._id}
+                                                                            value={reg.name}
+                                                                            disabled={isSelectedElsewhere}
+                                                                        >
+                                                                            {reg.name} (Team: {reg.teamMembers.length + 1} members)
+                                                                        </SelectItem>
+                                                                    );
+                                                                })}
+                                                        </SelectContent>
+                                                    </Select>
+                                                ) : (
+                                                    <Input
+                                                        placeholder="Team Lead Name"
+                                                        value={w.name}
+                                                        onChange={(e) => {
+                                                            const newWinners = [...groupedComp.teamWinners];
+                                                            newWinners[idx].name = e.target.value;
+                                                            setGroupedComp({ ...groupedComp, teamWinners: newWinners });
+                                                        }}
+                                                        className="h-8 text-sm"
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="col-span-5">
+                                                <Input
+                                                    placeholder="Prize (e.g. $100 / Gold)"
+                                                    value={w.prize}
+                                                    onChange={(e) => {
+                                                        const newWinners = [...groupedComp.teamWinners];
+                                                        newWinners[idx].prize = e.target.value;
+                                                        setGroupedComp({ ...groupedComp, teamWinners: newWinners });
+                                                    }}
+                                                    className="h-8 text-sm"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
                                 <Button
                                     type="button"
-                                    size="icon"
-                                    variant="secondary"
-                                    disabled={!newCompetition.trim()}
-                                    onClick={() => {
-                                        if (newCompetition.trim()) {
-                                            setEventReport({
-                                                ...eventReport,
-                                                competitions: [...eventReport.competitions, newCompetition.trim()]
-                                            });
-                                            setNewCompetition('');
-                                        }
-                                    }}
+                                    className="w-full bg-primary/20 hover:bg-primary/30 text-primary font-bold border-2 border-primary/20 border-dashed"
+                                    onClick={handleAddGroupedCompetition}
                                 >
-                                    <Plus className="h-4 w-4" />
+                                    <Plus className="h-4 w-4 mr-2" /> Add Competition to Report
                                 </Button>
                             </div>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                                {eventReport.competitions.map((comp, idx) => (
-                                    <Badge key={idx} variant="secondary" className="flex items-center gap-1 pl-2 pr-1 py-1">
-                                        {comp}
-                                        <Button
-                                            variant="ghost"
-                                            className="h-4 w-4 p-0 ml-1 rounded-full hover:bg-destructive/10 hover:text-destructive"
-                                            onClick={() => {
-                                                const newComps = [...eventReport.competitions];
-                                                newComps.splice(idx, 1);
-                                                setEventReport({ ...eventReport, competitions: newComps });
-                                            }}
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </Button>
-                                    </Badge>
-                                ))}
-                            </div>
-                        </div>
 
-                        <div className="space-y-3 border rounded-md p-3 bg-muted/20">
-                            <Label className="flex items-center gap-2 mb-2"><Award className="h-4 w-4 text-amber-500" /> Winners</Label>
-                            <div className="grid grid-cols-3 gap-2">
-                                <Input
-                                    placeholder="Winner Name"
-                                    value={newWinner.name}
-                                    onChange={(e) => setNewWinner({ ...newWinner, name: e.target.value })}
-                                />
-                                <Input
-                                    placeholder="Position (1st)"
-                                    value={newWinner.position}
-                                    onChange={(e) => setNewWinner({ ...newWinner, position: e.target.value })}
-                                />
-                                <Input
-                                    placeholder="Prize (Gold)"
-                                    value={newWinner.prize}
-                                    onChange={(e) => setNewWinner({ ...newWinner, prize: e.target.value })}
-                                />
-                            </div>
-                            <Button
-                                type="button"
-                                className="w-full mt-2"
-                                variant="secondary"
-                                disabled={!newWinner.name}
-                                onClick={() => {
-                                    if (newWinner.name) {
-                                        setEventReport({
-                                            ...eventReport,
-                                            winners: [...eventReport.winners, newWinner]
-                                        });
-                                        setNewWinner({ name: '', position: '', prize: '' });
-                                    }
-                                }}
-                            >
-                                <Plus className="h-4 w-4 mr-2" /> Add Winner
-                            </Button>
-
-                            <div className="space-y-2 mt-3">
-                                {eventReport.winners.map((winner, idx) => (
-                                    <div key={idx} className="flex justify-between items-center bg-card p-2 rounded border text-sm">
-                                        <div className="flex gap-2 items-center">
-                                            <Trophy className="h-3 w-3 text-gold" />
-                                            <span className="font-medium">{winner.name}</span>
-                                            <span className="text-muted-foreground">- {winner.position}</span>
-                                            {winner.prize && <Badge variant="outline" className="text-[10px] h-5">{winner.prize}</Badge>}
-                                        </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-6 w-6 text-destructive"
-                                            onClick={() => {
-                                                const newWinners = [...eventReport.winners];
-                                                newWinners.splice(idx, 1);
-                                                setEventReport({ ...eventReport, winners: newWinners });
-                                            }}
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </Button>
+                            {/* Preview of added Results */}
+                            {eventReport.competitions.length > 0 && (
+                                <div className="mt-6 pt-4 border-t border-primary/10">
+                                    <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-3 block">Current Results Preview</Label>
+                                    <div className="space-y-3">
+                                        {eventReport.competitions.map((compName) => {
+                                            const compWinners = eventReport.winners.filter(w => w.competition === compName);
+                                            return (
+                                                <div key={compName} className="bg-white rounded-lg border p-3 shadow-sm">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="font-bold text-sm text-slate-700">{compName}</span>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6 text-red-400 hover:text-red-600"
+                                                            onClick={() => {
+                                                                setEventReport({
+                                                                    ...eventReport,
+                                                                    competitions: eventReport.competitions.filter(c => c !== compName),
+                                                                    winners: eventReport.winners.filter(w => w.competition !== compName)
+                                                                });
+                                                            }}
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {compWinners.length > 0 ? compWinners.map((w, i) => (
+                                                            <Badge key={i} variant="outline" className="text-[10px] font-bold bg-slate-50">
+                                                                {w.position}: {w.name}
+                                                            </Badge>
+                                                        )) : <span className="text-[10px] text-muted-foreground italic">No winners added</span>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-2">
@@ -842,14 +1114,14 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                     <Button
                                         className="flex-1 bg-amber-600 hover:bg-amber-700 h-12 text-base font-bold"
                                         onClick={handleUpdateActiveEvent}
-                                        disabled={updateEventMutation.isPending}
+                                        disabled={updateEventMutation.isPending || completeEventMutation.isPending}
                                     >
                                         <Save className="h-5 w-5 mr-2" /> Update Event
                                     </Button>
                                     <Button
                                         className="flex-1 bg-green-600 hover:bg-green-700 h-12 text-base font-bold"
                                         onClick={handleAddEventReport}
-                                        disabled={completeEventMutation.isPending}
+                                        disabled={completeEventMutation.isPending || updateEventMutation.isPending}
                                     >
                                         <CheckCircle className="h-5 w-5 mr-2" /> End Event
                                     </Button>
@@ -858,14 +1130,14 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                 <Button
                                     className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-bold"
                                     onClick={handleAddEventReport}
-                                    disabled={updateClubMutation.isPending}
+                                    disabled={updateClubMutation.isPending || updateEventMutation.isPending || createEventManualMutation.isPending}
                                 >
                                     <Save className="h-5 w-5 mr-2" /> {editingId ? 'Update Event Report' : 'Save Event Report'}
                                 </Button>
                             )}
                         </div>
-                    </CardContent>
-                </Card>
+                    </CardContent >
+                </Card >
             ) : (
                 <>
                     {/* Active Announcements Section */}
@@ -963,7 +1235,7 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                                                                 location: ann.location || '',
                                                                 duration: '',
                                                                 participantCount: (ann.registrations?.length || 0).toString(),
-                                                                scope: 'Club',
+                                                                scope: 'Club Level',
                                                                 coverImage: ann.coverImage || ''
                                                             });
                                                             setIsAddingEvent(true);
@@ -989,7 +1261,8 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
                         </Button>
                     </div>
                 </>
-            )}
+            )
+            }
 
             <EventRegistrationsDialog
                 open={isViewRegistrationsOpen}
@@ -998,159 +1271,161 @@ export function ClubEventsManager({ club }: ClubEventsManagerProps) {
             />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                {history.length === 0 ? (
+                {pastEvents.length === 0 ? (
                     <div className="col-span-full text-center py-12 text-muted-foreground italic text-sm bg-muted/20 rounded-xl border-2 border-dashed">
                         No events recorded yet.
                     </div>
                 ) : (
-                    history.map((item: any) => (
-                        <Card key={item._id} className="group relative overflow-hidden flex flex-col h-full hover:shadow-lg transition-all border-0 ring-1 ring-border bg-card/50 backdrop-blur-sm">
-                            {/* Image Header */}
-                            <div className="aspect-video relative overflow-hidden bg-muted">
-                                <img
-                                    src={item.coverImage || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80'}
-                                    alt={item.title}
-                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                                <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Button
-                                        variant="secondary"
-                                        size="icon"
-                                        className="h-8 w-8 bg-white/90 hover:bg-white text-purple-600"
-                                        onClick={() => {
-                                            const matchedEvent = allEvents.find((e: any) =>
-                                                e.title.toLowerCase() === item.title.toLowerCase()
-                                            );
-                                            setViewRegistrationsEvent(matchedEvent || item);
-                                            setIsViewRegistrationsOpen(true);
-                                        }}
-                                        title="See Registrations"
-                                    >
-                                        <Users className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant="secondary"
-                                        size="icon"
-                                        className="h-8 w-8 bg-white/90 hover:bg-white text-blue-600"
-                                        onClick={() => handleEditClick(item)}
-                                        title="Edit Report"
-                                    >
-                                        <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                        variant="secondary"
-                                        size="icon"
-                                        className="h-8 w-8 bg-white/90 hover:bg-white text-destructive"
-                                        onClick={() => handleDeleteHistory(item._id)}
-                                        disabled={updateClubMutation.isPending}
-                                        title="Delete Report"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                                <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">
-                                    <Badge className="bg-blue-600 text-white border-0 uppercase text-[10px] font-bold">
-                                        {item.type}
-                                    </Badge>
-                                    {item.scope && (
-                                        <Badge className="bg-amber-600 text-white border-0 uppercase text-[10px] font-bold">
-                                            {item.scope}
-                                        </Badge>
-                                    )}
-                                </div>
-                            </div>
-
-                            <CardContent className="p-5 space-y-4 flex-1 flex flex-col">
-                                <div>
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium mb-1">
-                                        <Calendar className="h-3.5 w-3.5" />
-                                        {item.date ? new Date(item.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : 'No date'}
+                    pastEvents.map((item: any) => (
+                        <Card key={item._id || item.id} className="group overflow-hidden border-none shadow-sm hover:shadow-md transition-all bg-white ring-1 ring-slate-200">
+                            <CardContent className="p-0">
+                                <div className="flex flex-col md:flex-row">
+                                    {/* Compact Poster */}
+                                    <div className="w-full md:w-56 h-48 md:h-auto relative overflow-hidden bg-muted">
+                                        <img
+                                            src={item.coverImage || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80'}
+                                            alt={item.title}
+                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                        />
+                                        <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                            <Badge className="bg-white/90 text-primary hover:bg-white border-none shadow-sm text-[9px] font-black uppercase">
+                                                {item.type}
+                                            </Badge>
+                                            <Badge className="bg-emerald-500 text-white border-none shadow-sm text-[8px] font-black uppercase">
+                                                Verified
+                                            </Badge>
+                                        </div>
                                     </div>
-                                    <h5 className="font-bold text-xl leading-tight text-foreground group-hover:text-blue-600 transition-colors">
-                                        {item.title}
-                                    </h5>
+
+                                    {/* Content Area */}
+                                    <div className="flex-1 p-5 flex flex-col justify-between">
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                                                    <Calendar className="h-3 w-3 text-primary" />
+                                                    {item.date ? new Date(item.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : 'No date'}
+                                                    {item.location && (
+                                                        <>
+                                                            <span className="opacity-30">•</span>
+                                                            <MapPin className="h-3 w-3 text-primary" />
+                                                            <span className="truncate max-w-[120px]">{item.location}</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <h3 className="text-xl font-black text-slate-800 leading-tight group-hover:text-primary transition-colors">{item.title}</h3>
+                                            <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed italic">
+                                                {item.description || 'Verified record of achievement and participation.'}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-50">
+                                            <div className="flex items-center gap-3">
+                                                {item.duration && (
+                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                                                        <Clock className="h-3.5 w-3.5 text-primary" />
+                                                        {item.duration}
+                                                    </div>
+                                                )}
+
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-purple-600 rounded-full"
+                                                    onClick={() => {
+                                                        const matchedEvent = allEvents.find((e: any) =>
+                                                            e.title.toLowerCase() === item.title.toLowerCase()
+                                                        );
+                                                        setViewRegistrationsEvent(matchedEvent || item);
+                                                        setIsViewRegistrationsOpen(true);
+                                                    }}
+                                                >
+                                                    <Users className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-blue-600 rounded-full"
+                                                    onClick={() => handleEditClick(item)}
+                                                >
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-destructive rounded-full"
+                                                    onClick={() => handleDeleteHistory(item._id)}
+                                                    disabled={updateClubMutation.isPending || deleteEventMutation.isPending}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-
-                                <p className="text-sm text-muted-foreground line-clamp-3">
-                                    {item.description}
-                                </p>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-3 border-y text-xs text-muted-foreground">
-                                    {item.location && (
-                                        <div className="flex items-center gap-2">
-                                            <MapPin className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                                            <span className="truncate">{item.location}</span>
-                                        </div>
-                                    )}
-                                    {item.duration && (
-                                        <div className="flex items-center gap-2">
-                                            <Clock className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                                            <span>{item.duration}</span>
-                                        </div>
-                                    )}
-                                    {item.participantCount > 0 && (
-                                        <div className="flex items-center gap-2">
-                                            <Users className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                                            <span>{item.participantCount}+ attendees</span>
-                                        </div>
-                                    )}
+                            </CardContent>
+                            {/* Additional sections moved here */}
+                            {(item.chiefGuests?.length > 0 || item.winners?.length > 0 || item.collaboratingClubs?.length > 0 || item.driveLink) && (
+                                <div className="p-5 pt-0">
                                     {item.driveLink && (
-                                        <a href={item.driveLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-600 hover:underline font-bold">
-                                            <ExternalLink className="h-3.5 w-3.5 shrink-0" /> Highlights
+                                        <a href={item.driveLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-600 hover:underline font-bold text-sm mb-3">
+                                            <ExternalLink className="h-4 w-4 shrink-0" /> View Highlights
                                         </a>
                                     )}
-                                </div>
-
-                                {(item.chiefGuests?.length > 0 || item.winners?.length > 0) && (
-                                    <div className="space-y-3 pt-1">
-                                        {item.chiefGuests?.length > 0 && (
+                                    {item.chiefGuests?.length > 0 && (
+                                        <div className="space-y-2 mb-3">
+                                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                                                <Crown className="h-3 w-3 text-amber-500" /> Chief Guests
+                                            </div>
                                             <div className="flex flex-wrap gap-1.5">
                                                 {item.chiefGuests.map((g: any, idx: number) => (
                                                     <Badge key={idx} variant="outline" className="text-[10px] font-normal border-blue-200 bg-blue-50/50">
-                                                        <Crown className="h-2.5 w-2.5 mr-1 text-amber-500" />
                                                         {g.name}
                                                     </Badge>
                                                 ))}
                                             </div>
-                                        )}
-                                        {item.winners?.length > 0 && (
-                                            <div className="space-y-2">
-                                                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                                                    <Trophy className="h-3 w-3 text-amber-500" /> Winners
-                                                </div>
-                                                <div className="grid grid-cols-1 gap-1.5">
-                                                    {item.winners.map((winner: any, idx: number) => (
-                                                        <div key={idx} className="flex items-center justify-between bg-amber-50/30 p-1.5 rounded border border-amber-100/50 text-xs">
-                                                            <span className="font-bold text-amber-900 line-clamp-1">{winner.name}</span>
-                                                            <Badge className="bg-amber-500 text-[9px] font-black h-4 px-1 leading-none">{winner.position}</Badge>
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                        </div>
+                                    )}
+                                    {item.winners?.length > 0 && (
+                                        <div className="space-y-2 mb-3">
+                                            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                                <Trophy className="h-3 w-3 text-amber-500" /> Winners
                                             </div>
-                                        )}
-                                    </div>
-                                )}
+                                            <div className="grid grid-cols-1 gap-1.5">
+                                                {item.winners.map((winner: any, idx: number) => (
+                                                    <div key={idx} className="flex items-center justify-between bg-amber-50/30 p-1.5 rounded border border-amber-100/50 text-xs">
+                                                        <span className="font-bold text-amber-900 line-clamp-1">{winner.name}</span>
+                                                        <Badge className="bg-amber-500 text-[9px] font-black h-4 px-1 leading-none">{winner.position}</Badge>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
-                                {item.collaboratingClubs?.length > 0 && (
-                                    <div className="mt-auto pt-3 border-t">
-                                        <div className="flex items-center gap-1.5 mb-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
-                                            <Users className="h-2.5 w-2.5" /> Powered By
+                                    {item.collaboratingClubs?.length > 0 && (
+                                        <div className="mt-auto pt-3 border-t">
+                                            <div className="flex items-center gap-1.5 mb-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                                                <Users className="h-2.5 w-2.5" /> Powered By
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                                {item.collaboratingClubs.map((clubName: string, idx: number) => (
+                                                    <Badge key={idx} variant="secondary" className="bg-zinc-100 text-zinc-600 text-[9px] font-bold border-0 h-4 px-1.5">
+                                                        {clubName}
+                                                    </Badge>
+                                                ))}
+                                            </div>
                                         </div>
-                                        <div className="flex flex-wrap gap-1">
-                                            {item.collaboratingClubs.map((clubName: string, idx: number) => (
-                                                <Badge key={idx} variant="secondary" className="bg-zinc-100 text-zinc-600 text-[9px] font-bold border-0 h-4 px-1.5">
-                                                    {clubName}
-                                                </Badge>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </CardContent>
+                                    )}
+                                </div>
+                            )}
                         </Card>
                     ))
                 )}
             </div>
-        </div>
+        </div >
     );
 }

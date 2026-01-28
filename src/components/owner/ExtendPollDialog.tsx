@@ -19,9 +19,10 @@ interface ExtendPollDialogProps {
     onClose: () => void;
     pollId: string;
     currentExpiry: string | null;
+    college?: string;
 }
 
-export function ExtendPollDialog({ open, onClose, pollId, currentExpiry }: ExtendPollDialogProps) {
+export function ExtendPollDialog({ open, onClose, pollId, currentExpiry, college }: ExtendPollDialogProps) {
     const [hours, setHours] = useState('24');
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -29,7 +30,7 @@ export function ExtendPollDialog({ open, onClose, pollId, currentExpiry }: Exten
     const extendMutation = useMutation({
         mutationFn: () => api.extendPoll(pollId, parseInt(hours)),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['college-polls'] });
+            queryClient.invalidateQueries({ queryKey: ["college-polls", college] });
             toast({ title: 'Poll Extended', description: `Added ${hours} hours to the poll.` });
             onClose();
         },

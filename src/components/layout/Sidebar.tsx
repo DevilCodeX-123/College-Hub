@@ -13,6 +13,7 @@ import {
   Crown,
   Building2,
   ShieldAlert,
+  HelpCircle,
   Calendar
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ const navItems = [
   { path: '/leaderboard', icon: Trophy, label: 'Leaderboard' },
   { path: '/profile', icon: User, label: 'Profile' },
   { path: '/campus-map', icon: Map, label: 'Smart Campus' },
+  { path: '/help', icon: HelpCircle, label: 'Help & More' },
 ];
 
 const ownerItems = [

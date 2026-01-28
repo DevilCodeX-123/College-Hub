@@ -25,7 +25,7 @@ const pollSchema = new mongoose.Schema({
     }],
     targetRoles: [{
         type: String,
-        enum: ['student', 'club_member', 'core_member', 'club_coordinator', 'club_co_coordinator', 'club_head', 'admin', 'co_admin', 'all'],
+        enum: ['student', 'club_member', 'core_member', 'club_coordinator', 'club_co_coordinator', 'club_head', 'admin', 'co_admin', 'owner', 'all'],
         default: 'all'
     }],
     college: {

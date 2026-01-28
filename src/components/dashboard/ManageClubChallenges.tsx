@@ -6,7 +6,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
     Dialog,
     DialogContent,
@@ -23,19 +22,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
     Trophy,
-    Users,
     Clock,
     Plus,
     Loader2,
     Trash2,
     Edit,
-    AlertCircle,
     Zap,
     X,
     CheckCircle2,
     ThumbsUp,
     ThumbsDown,
-    Lightbulb
+    Lightbulb,
+    ExternalLink
 } from 'lucide-react';
 import { Challenge } from '@/types';
 
@@ -51,7 +49,7 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [isGradingOpen, setIsGradingOpen] = useState(false);
-    const [selectedChallenge, setSelectedChallenge] = useState<any>(null);
+    const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
 
     // Form States
     const [newChallenge, setNewChallenge] = useState({
@@ -76,7 +74,7 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
     const [gradingData, setGradingData] = useState({
         marks: 0,
         feedback: '',
-        awardBadge: { name: '', description: '' },
+        awardBadge: { name: '', icon: '' },
         awardSkill: ''
     });
 
@@ -122,6 +120,7 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
             const payload = { ...data, clubId, clubName };
             if (!payload.deadline) delete payload.deadline;
             if (!payload._id) delete payload._id;
+
             // Clean phases
             if (payload.phases && payload.phases.length > 0) {
                 payload.phases = payload.phases.map((p: any) => {
@@ -130,6 +129,11 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
                     return clean;
                 });
             }
+
+            // Sync calculated points
+            const calcPoints = 100 + (payload.phases?.length > 1 ? (payload.phases.length - 1) * 50 : 0);
+            payload.points = calcPoints;
+
             return api.createChallenge(payload);
         },
         onSuccess: () => {
@@ -156,6 +160,10 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
                     return clean;
                 });
             }
+            // Sync calculated points
+            const calcPoints = 100 + (payload.phases?.length > 1 ? (payload.phases.length - 1) * 50 : 0);
+            payload.points = calcPoints;
+
             return api.updateChallenge(data._id, payload);
         },
         onSuccess: () => {
@@ -203,7 +211,7 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
             queryClient.invalidateQueries({ queryKey: ['club-challenges', clubId] });
             toast({ title: "Submission Graded", description: "Marks and awards have been processed." });
             setIsGradingOpen(false);
-            setGradingData({ marks: 0, feedback: '', awardBadge: { name: '', description: '' }, awardSkill: '' });
+            setGradingData({ marks: 0, feedback: '', awardBadge: { name: '', icon: '' }, awardSkill: '' });
         }
     });
 
@@ -258,7 +266,7 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
 
     if (isLoading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin" /></div>;
 
-    const myChallenges = challenges.filter((c: any) => c.clubId === clubId);
+    const myChallenges = challenges.filter((c: Challenge) => c.clubId === clubId);
 
     const formatDateForInput = (dateStr: string | null | undefined) => {
         if (!dateStr) return '';
@@ -383,7 +391,7 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
                 </Button>
             </div>
 
-            <Tabs defaultValue="active" className="w-full" onValueChange={setActiveTab}>
+            <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
                 <TabsList>
                     <TabsTrigger value="active">Active Challenges ({activeChallenges.length})</TabsTrigger>
                     <TabsTrigger value="past">Past Challenges ({pastChallenges.length})</TabsTrigger>
@@ -490,8 +498,15 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label>Points (XP)</Label>
-                                <Input type="number" value={newChallenge.points} onChange={e => setNewChallenge({ ...newChallenge, points: parseInt(e.target.value) })} />
+                                <Label className="flex justify-between">
+                                    Points (XP)
+                                    <span className="text-[10px] text-muted-foreground uppercase font-mono">Auto-Calculated</span>
+                                </Label>
+                                <Input
+                                    className="bg-muted font-bold"
+                                    value={100 + (newChallenge.phases?.length > 1 ? (newChallenge.phases.length - 1) * 50 : 0)}
+                                    readOnly
+                                />
                             </div>
                             <div className="space-y-2">
                                 <Label>Entry Fee (XP)</Label>
@@ -622,45 +637,93 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
                         {submissions.length === 0 ? (
                             <p className="text-center text-muted-foreground py-8">No submissions yet.</p>
                         ) : (
-                            submissions.map((sub: any) => {
+                            submissions.sort((a: any, b: any) => {
+                                if (a.status === 'pending' && b.status !== 'pending') return -1;
+                                if (a.status !== 'pending' && b.status === 'pending') return 1;
+                                return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+                            }).map((sub: any) => {
                                 const phaseName = selectedChallenge?.phases?.find((p: any) => p._id === sub.phaseId || p.id === sub.phaseId)?.name;
 
-                                return (
-                                    <div key={sub._id || sub.submissionId} className="border rounded-lg p-4 space-y-4 bg-secondary/5">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-bold">{sub.userName}</p>
-                                                <p className="text-xs text-muted-foreground">Submitted: {new Date(sub.submittedAt).toLocaleDateString()}</p>
-                                                {phaseName && <Badge variant="outline" className="mt-1">{phaseName}</Badge>}
+                                if (sub.status !== 'pending') {
+                                    // READ-ONLY VIEW for Graded Submissions
+                                    return (
+                                        <div key={sub._id || sub.submissionId} className="border rounded-lg p-4 bg-muted/20 opacity-80 hover:opacity-100 transition-opacity">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <p className="font-bold flex items-center gap-2">
+                                                        {sub.userName}
+                                                        {sub.status === 'approved' ? (
+                                                            <Badge variant="success" className="h-5 px-1.5 text-[10px]">Approved</Badge>
+                                                        ) : (
+                                                            <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">Rejected</Badge>
+                                                        )}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">graded on {new Date(sub.reviewedAt || sub.submittedAt).toLocaleDateString()}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-2xl font-black text-primary">{sub.marks || 0}</p>
+                                                    <p className="text-[10px] uppercase font-bold text-muted-foreground">Marks</p>
+                                                </div>
                                             </div>
-                                            <Badge variant={sub.status === 'approved' ? 'success' : sub.status === 'rejected' ? 'destructive' : 'secondary'}>
-                                                {sub.status || 'Pending'}
-                                            </Badge>
+
+                                            <div className="flex items-center gap-2 text-xs mb-3">
+                                                <a href={sub.submissionLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                                                    View Submission <ExternalLink className="h-3 w-3" />
+                                                </a>
+                                                {phaseName && <Badge variant="outline" className="text-[10px]">{phaseName}</Badge>}
+                                            </div>
+
+                                            {(sub.feedback) && (
+                                                <div className="bg-white p-3 rounded border text-sm italic text-muted-foreground">
+                                                    "{sub.feedback}"
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                }
+
+                                // EDITABLE VIEW for Pending Submissions
+                                return (
+                                    <div key={sub._id || sub.submissionId} className="border-2 border-primary/20 rounded-xl p-5 space-y-4 bg-white shadow-sm relative">
+                                        <div className="absolute top-0 right-0 p-2">
+                                            <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200 animate-pulse">Pending Review</Badge>
                                         </div>
 
-                                        <div className="bg-background p-2 rounded border text-sm">
-                                            <span className="font-semibold text-xs text-muted-foreground uppercase">Submission Link:</span>
-                                            <a href={sub.submissionLink} target="_blank" rel="noopener noreferrer" className="block text-primary hover:underline truncate mt-1">
-                                                {sub.submissionLink}
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="font-black text-lg">{sub.userName}</p>
+                                                <p className="text-xs text-muted-foreground font-medium">Submitted: {new Date(sub.submittedAt).toLocaleDateString()}</p>
+                                                {phaseName && <Badge variant="outline" className="mt-1">{phaseName}</Badge>}
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-slate-50 p-3 rounded-lg border text-sm">
+                                            <span className="font-bold text-xs text-slate-500 uppercase tracking-wider block mb-1">Submission Link</span>
+                                            <a href={sub.submissionLink} target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline truncate block flex items-center gap-2">
+                                                {sub.submissionLink} <ExternalLink className="h-3 w-3" />
                                             </a>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                                             <div className="space-y-2">
-                                                <Label>Marks (0-100)</Label>
-                                                <Input
-                                                    type="number"
-                                                    placeholder="0"
-                                                    max={100}
-                                                    onChange={e => setGradingData({ ...gradingData, marks: parseInt(e.target.value) })}
-                                                />
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    Award: {Math.round(((gradingData.marks || 0) / 100) * (selectedChallenge?.points || 0))} XP
-                                                </p>
+                                                <Label className="text-xs font-bold uppercase">Marks (0-100)</Label>
+                                                <div className="flex gap-2 items-center">
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        max={100}
+                                                        className="font-bold text-lg h-12"
+                                                        onChange={e => setGradingData({ ...gradingData, marks: parseInt(e.target.value) })}
+                                                    />
+                                                    <div className="text-xs font-medium text-muted-foreground">
+                                                        Points: <span className="text-primary font-bold">{Math.round(((gradingData.marks || 0) / 100) * (selectedChallenge?.points || 0))} XP</span>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label>Feedback</Label>
+                                                <Label className="text-xs font-bold uppercase">Feedback</Label>
                                                 <Input
+                                                    className="h-12"
                                                     placeholder="Great work..."
                                                     onChange={e => setGradingData({ ...gradingData, feedback: e.target.value })}
                                                 />
@@ -668,26 +731,32 @@ export function ManageClubChallenges({ clubId, clubName }: ManageClubChallengesP
                                         </div>
 
                                         <div className="space-y-2">
-                                            <Label>Award Badge (Optional)</Label>
+                                            <Label className="text-xs font-bold uppercase text-muted-foreground">Award Badge (Optional)</Label>
+                                            <p className="text-[10px] text-muted-foreground italic">Badge will show: Competition Name → Award Type → Club Name</p>
                                             <div className="grid grid-cols-2 gap-2">
                                                 <Input
-                                                    placeholder="Badge Name"
+                                                    placeholder="Award Type (e.g., Grandmaster, Winner)"
+                                                    className="h-9 text-xs"
                                                     value={gradingData.awardBadge.name}
                                                     onChange={e => setGradingData({ ...gradingData, awardBadge: { ...gradingData.awardBadge, name: e.target.value } })}
                                                 />
                                                 <Input
-                                                    placeholder="Description"
-                                                    value={gradingData.awardBadge.description}
-                                                    onChange={e => setGradingData({ ...gradingData, awardBadge: { ...gradingData.awardBadge, description: e.target.value } })}
+                                                    placeholder="Icon (emoji, e.g., 🏆)"
+                                                    className="h-9 text-xs"
+                                                    value={gradingData.awardBadge.icon}
+                                                    onChange={e => setGradingData({ ...gradingData, awardBadge: { ...gradingData.awardBadge, icon: e.target.value } })}
                                                 />
                                             </div>
                                         </div>
 
                                         <div className="pt-2 flex justify-end">
-                                            <Button size="sm" onClick={() => gradeMutation.mutate({
-                                                challengeId: selectedChallenge._id || selectedChallenge.id,
-                                                submissionId: sub._id || sub.submissionId
-                                            })}>
+                                            <Button size="lg" className="font-bold shadow-lg shadow-primary/20" onClick={() => {
+                                                if (!selectedChallenge) return;
+                                                gradeMutation.mutate({
+                                                    challengeId: selectedChallenge._id || selectedChallenge.id,
+                                                    submissionId: sub._id || sub.submissionId
+                                                });
+                                            }}>
                                                 {gradeMutation.isPending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                                                 Submit Grade
                                             </Button>

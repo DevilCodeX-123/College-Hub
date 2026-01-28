@@ -61,13 +61,17 @@ export function CreateBroadcastDialog({ open, onClose, collegeName }: CreateBroa
 
         if (!user) return;
 
-        sendNotificationMutation.mutate({
+        const payload = {
             recipient,
             title,
             message,
-            senderId: user.id,
-            type
-        });
+            senderId: user.id || (user as any)._id,
+            type,
+            isManualBroadcast: true
+        };
+
+        console.log('Sending Broadcast Payload:', payload);
+        sendNotificationMutation.mutate(payload);
     };
 
     return (

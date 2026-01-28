@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Check, Circle, Zap, BookOpen, Users, Target, MessageSquare, Loader2, Link as LinkIcon, AlertCircle, ClipboardList } from 'lucide-react';
+import { Check, Circle, Zap, BookOpen, Users, Target, MessageSquare, Loader2, Link as LinkIcon, AlertCircle, ClipboardList, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -31,10 +31,11 @@ export function DailyTasks({ tasks, userSubmissions = [] }: DailyTasksProps) {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [submissionLink, setSubmissionLink] = useState('');
 
-  // Filter tasks based on "Daily" or "Joined Club"
+  // Filter tasks based on "Daily", "Joined Club", or "Targeted Operational Work"
   const filteredTasks = (Array.isArray(tasks) ? tasks : []).filter(task => {
     if (task.category === 'daily') return true;
     if (task.category === 'club' && Array.isArray(user?.joinedClubs) && user?.joinedClubs.includes(task.clubId)) return true;
+    if (task.category === 'operational' && task.targetType === 'specific' && Array.isArray(task.targetEmails) && task.targetEmails.includes(user?.email)) return true;
     return false;
   });
 
@@ -82,11 +83,11 @@ export function DailyTasks({ tasks, userSubmissions = [] }: DailyTasksProps) {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
-              Daily Reward Tasks
+              Daily Missions
               {allTasksCompleted && <Badge variant="success" className="animate-bounce-subtle">All Done!</Badge>}
             </CardTitle>
             <CardDescription>
-              {allTasksCompleted ? "You've finished all your tasks for today!" : "Submit proof to earn XP"}
+              {allTasksCompleted ? "You've finished all your missions for today!" : "Submit proof to earn XP"}
             </CardDescription>
           </div>
           <div className="flex items-center gap-1 text-xp bg-xp/10 px-2 py-1 rounded text-xs font-bold">
@@ -134,12 +135,14 @@ export function DailyTasks({ tasks, userSubmissions = [] }: DailyTasksProps) {
                   isApproved ? "bg-success text-white border-success" :
                     isPending ? "bg-warning/20 text-warning border-warning/30" :
                       isRejected ? "bg-destructive/20 text-destructive border-destructive/30" :
-                        "bg-secondary/50 text-muted-foreground border-border"
+                        task.category === 'operational' ? "bg-primary/20 text-primary border-primary/30 shadow-inner" :
+                          "bg-secondary/50 text-muted-foreground border-border"
                 )}>
                   {isApproved ? <Check className="h-4 w-4" /> :
                     isPending ? <Loader2 className="h-4 w-4 animate-spin" /> :
                       isRejected ? <AlertCircle className="h-4 w-4" /> :
-                        <Target className="h-4 w-4" />}
+                        task.category === 'operational' ? <Zap className="h-4 w-4 fill-primary/20" /> :
+                          <Target className="h-4 w-4" />}
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -153,8 +156,20 @@ export function DailyTasks({ tasks, userSubmissions = [] }: DailyTasksProps) {
                     {task.category === 'club' && (
                       <Badge variant="outline" className="text-[10px] h-4 px-1">{task.clubName || 'Club'}</Badge>
                     )}
+                    {task.category === 'operational' && (
+                      <Badge className="bg-primary text-[10px] h-4 px-1.5 font-black uppercase tracking-widest text-white">ACTIVE MISSION</Badge>
+                    )}
+                    {task.isMandatory && (
+                      <Badge variant="destructive" className="text-[9px] h-4 px-1.5 font-black uppercase tracking-tighter">MANDATORY</Badge>
+                    )}
+                    <Badge variant="secondary" className="text-[9px] h-4 px-1.5 font-black border-primary/20 text-primary">+{task.pointsReward} XP REWARD</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{task.description}</p>
+                  {task.deadline && (
+                    <p className="text-[10px] text-rose-600 font-black mt-1 uppercase tracking-wider flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> MISSION DEADLINE: {new Date(task.deadline).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
 
                 <Dialog open={selectedTask?._id === task._id} onOpenChange={(open) => !open && setSelectedTask(null)}>
