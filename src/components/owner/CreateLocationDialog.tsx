@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -86,12 +87,24 @@ export function CreateLocationDialog({ open, onClose, collegeName }: CreateLocat
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="category">Category</Label>
-                        <Input
-                            id="category"
-                            placeholder="e.g., Academic, Food, Sport"
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
-                        />
+                        <Select value={category} onValueChange={setCategory}>
+                            <SelectTrigger id="category">
+                                <SelectValue placeholder="Select a category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="General">General</SelectItem>
+                                <SelectItem value="Academic">Academic</SelectItem>
+                                <SelectItem value="Administrative">Administrative</SelectItem>
+                                <SelectItem value="Hostel">Hostel</SelectItem>
+                                <SelectItem value="Canteen">Canteen</SelectItem>
+                                <SelectItem value="Sports">Sports</SelectItem>
+                                <SelectItem value="Library">Library</SelectItem>
+                                <SelectItem value="Laboratories">Laboratories</SelectItem>
+                                <SelectItem value="Auditorium">Auditorium</SelectItem>
+                                <SelectItem value="Transport">Transport</SelectItem>
+                                <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="description">Description</Label>

@@ -11,8 +11,6 @@ import {
   Shield,
   Target,
   Crown,
-  Building2,
-  ShieldAlert,
   HelpCircle,
   Calendar
 } from 'lucide-react';
@@ -34,33 +32,7 @@ const navItems = [
   { path: '/help', icon: HelpCircle, label: 'Help & More' },
 ];
 
-const ownerItems = [
-  { path: '/owner', icon: Crown, label: 'Owner Panel', requiredRole: 'owner' as const },
-];
 
-const collegeAdminItems = [
-  { path: '/admin', icon: Shield, label: 'College Coordinator Panel', requiredRole: 'admin' as const },
-];
-
-const collegeCoAdminItems = [
-  { path: '/co-admin', icon: Building2, label: 'College Co-Coordinator Panel', requiredRole: 'co_admin' as const },
-];
-
-const clubCoordinatorItems = [
-  { path: '/club-coordinator', icon: Shield, label: 'Club Manager Panel', requiredRole: 'club_coordinator' as const },
-];
-
-const clubCoCoordinatorItems = [
-  { path: '/club-co-coordinator', icon: ShieldAlert, label: 'Club Co-Manager Panel', requiredRole: 'club_co_coordinator' as const },
-];
-
-const clubHeadItems = [
-  { path: '/club-head', icon: Target, label: 'Club Head Panel', requiredRole: 'club_head' as const },
-];
-
-const coreTeamItems = [
-  { path: '/core-team', icon: Users, label: 'Core Team Panel', requiredRole: 'core_member' as const },
-];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -162,8 +134,7 @@ export function Sidebar() {
                 {!collapsed && <span>Core Team Panel</span>}
               </NavLink>
             )}
-          </> // Added closing tag for fragment to match the logic
-
+          </>
         )}
       </nav>
 

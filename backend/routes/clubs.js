@@ -50,11 +50,12 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET club by coordinator ID
+// GET club by coordinator ID or core team membership
 router.get('/coordinator/:userId', async (req, res) => {
     try {
 
         const requestingUser = await User.findById(req.query.requestingUserId || req.params.userId);
+        console.log(`[Club Lookup] UserId: ${req.params.userId}, Role: ${requestingUser?.role}`);
 
         if (requestingUser && requestingUser.role === 'owner') {
             // Owner can see any club, default to the first one for testing purposes
@@ -64,9 +65,21 @@ router.get('/coordinator/:userId', async (req, res) => {
             return res.json(club);
         }
 
-        const club = await Club.findOne({ coordinatorId: req.params.userId }).lean();
+        // Find club where user is coordinator OR in core team
+        const club = await Club.findOne({
+            $or: [
+                { coordinatorId: req.params.userId },
+                { 'coreTeam.userId': req.params.userId }
+            ]
+        }).lean();
+
+        console.log(`[Club Lookup] Found club: ${club ? club.name : 'NONE'}`);
+        if (club) {
+            console.log(`[Club Lookup] CoordinatorId: ${club.coordinatorId}, CoreTeam:`, club.coreTeam?.map(m => `${m.name}(${m.userId})`));
+        }
+
         if (!club) {
-            return res.status(404).json({ message: 'Club not found for this coordinator' });
+            return res.status(404).json({ message: 'Club not found for this user' });
         }
 
         // Bubble check: If requestingUser is not the coordinator, check college
@@ -84,6 +97,7 @@ router.get('/coordinator/:userId', async (req, res) => {
         club.memberCount = actualCount;
         res.json(club);
     } catch (err) {
+        console.error('[Club Lookup Error]', err);
         res.status(500).json({ message: err.message });
     }
 });

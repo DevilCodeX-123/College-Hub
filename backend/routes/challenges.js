@@ -322,6 +322,15 @@ router.post('/:id/create-team', async (req, res) => {
         const existingTeam = await ChallengeTeam.findOne({ challengeId, members: userId });
         if (existingTeam) return res.status(400).json({ message: 'You are already in a team for this challenge' });
 
+        // Check if team name already exists for this challenge
+        const existingTeamName = await ChallengeTeam.findOne({
+            challengeId,
+            name: { $regex: new RegExp(`^${teamName}$`, 'i') }
+        });
+        if (existingTeamName) {
+            return res.status(400).json({ message: 'This team name is already taken. Please choose another one.' });
+        }
+
         // Check if user has enough points for entry fee
         const fee = challenge.entryFee || 0;
         if (user.points < fee) {

@@ -432,7 +432,7 @@ export const api = {
         return response.data;
     },
     joinChallengeTeam: async (userId: string, code: string) => {
-        const response = await axios.post(`${API_URL}/challenges/join-team`, { userId, code }, getAuthDetails());
+        const response = await axios.post(`${API_URL}/challenges/join-team`, { userId, joinCode: code }, getAuthDetails());
         return response.data;
     },
     removeTeamMember: async (teamId: string, memberId: string, userId: string) => {

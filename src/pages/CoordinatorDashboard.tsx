@@ -10,12 +10,20 @@ export default function CoordinatorDashboard() {
     const { user } = useAuth();
 
     // Fetch Club by Coordinator ID
-    const { data: club, isLoading } = useQuery({
+    const { data: club, isLoading, error } = useQuery({
         queryKey: ['my-club', user?.id],
         queryFn: () => user ? api.getClubByCoordinator(user.id, user.id) : null,
         enabled: !!user,
         retry: false
     });
+
+    // Debug logging
+    if (error) {
+        console.error('[CoordinatorDashboard] Error fetching club:', error);
+    }
+    if (club) {
+        console.log('[CoordinatorDashboard] Successfully loaded club:', club.name);
+    }
 
     if (isLoading) {
         return (

@@ -5,7 +5,6 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -13,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, UserCog, UserPlus, Loader2, Edit, Trash2, Crown, Shield } from 'lucide-react';
+import { UserCog, UserPlus, Loader2, Edit, Trash2, Crown, Shield } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -40,12 +39,19 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers, defaul
 
     const clubId = club?._id || club?.id;
 
-    // Filter to only show members of the club
-    const candidates = collegeUsers.filter((u: any) =>
-        u.role !== 'admin' &&
-        u.role !== 'owner' &&
-        u.joinedClubs?.includes(clubId)
-    );
+    // Filter to show all potentially eligible users (Members of the club)
+    const candidates = collegeUsers.filter((u: any) => {
+        // Exclude system roles
+        if (u.role === 'admin' || u.role === 'owner') return false;
+
+        // Must be in the club
+        const isInClub = u.joinedClubs?.some((id: any) => id.toString() === clubId.toString());
+
+        // Also include if they are already in the core team (edge case protection)
+        const isInCoreTeam = club?.coreTeam?.some((m: any) => m.userId === (u._id || u.id));
+
+        return isInClub || isInCoreTeam;
+    });
 
     // Unified state reset and sync when dialog opens or target changes
     useEffect(() => {
@@ -74,8 +80,6 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers, defaul
             setCustomTitle('');
         }
     }, [open, defaultTab, targetUserId, club?.coreTeam]);
-
-    const isRestrictedAdmin = user?.role === 'club_head' || user?.role === 'club_co_coordinator';
 
     const updateTeamMutation = useMutation({
         mutationFn: async ({ userId, role, customTitle }: { userId: string, role: string, customTitle: string }) => {

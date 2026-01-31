@@ -17,7 +17,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -55,7 +54,7 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
   const isCompleted = activity?.status === 'completed';
 
   // Fetch team info if it's a team challenge and user joined
-  const { data: myTeam, refetch: refetchMyTeam } = useQuery({
+  const { data: myTeam } = useQuery({
     queryKey: ['challenge-team', challengeId, user?.id],
     queryFn: () => api.getMyChallengeTeam(challengeId, user?.id || ''),
     enabled: hasJoined && challenge.isTeamChallenge
@@ -123,7 +122,7 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
 
   const createTeamMutation = useMutation({
     mutationFn: (name: string) => api.createChallengeTeam(challengeId, user?.id || '', name),
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['challenges'] });
       queryClient.invalidateQueries({ queryKey: ['user'] });
       queryClient.invalidateQueries({ queryKey: ['challenge-team', challenge.id, user?.id] });
@@ -139,12 +138,18 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
 
   const joinTeamMutation = useMutation({
     mutationFn: (code: string) => api.joinChallengeTeam(user?.id || '', code),
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['challenges'] });
       queryClient.invalidateQueries({ queryKey: ['user'] });
       queryClient.invalidateQueries({ queryKey: ['challenge-team', challenge.id, user?.id] });
+      // Force detailed refetch to ensure UI updates
+      queryClient.refetchQueries({ queryKey: ['challenge-team', challengeId, user?.id] });
+
       api.getProfile(user?.id || '').then(u => updateUser(u));
       toast({ title: 'Team Joined!', description: 'You are now part of the team.' });
+
+      // Ensure we stay on the task view to see the new team state
+      setShowTask(true);
     },
     onError: (err: any) => {
       toast({ title: 'Join Failed', description: err.response?.data?.message || 'Invalid team code', variant: 'destructive' });
@@ -182,7 +187,7 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
 
   const submitMutation = useMutation({
     mutationFn: (variables: { link: string, phaseId?: string }) => api.submitChallenge(challengeId, user?.id || '', variables.link, variables.phaseId),
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['challenges'] });
       // Update local user activity if needed or just show success
       toast({
@@ -558,17 +563,7 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
                         </div>
                       )}
 
-                      {challenge.joinCode && (
-                        <div className="pt-2 border-t">
-                          <p className="text-xs text-muted-foreground mb-2">Challenge Join Code</p>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="font-mono text-base tracking-widest px-4 py-2">
-                              {challenge.joinCode}
-                            </Badge>
-                            <p className="text-xs text-muted-foreground">Use this code to find and join this challenge</p>
-                          </div>
-                        </div>
-                      )}
+
                     </div>
                   )}
 
@@ -832,7 +827,6 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
                                       {challenge.phases.map((phase: any, index: number) => {
                                         const isSubmitted = userSubmissions.some((s: any) => (s.phaseId === phase._id || s.phaseId === phase.id) && s.status !== 'rejected');
                                         const isLocked = index > nextPhaseIndex;
-                                        const isTarget = index === nextPhaseIndex;
 
                                         return (
                                           <option
@@ -861,7 +855,7 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
                                       className="flex-1"
                                     />
                                     <Button
-                                      onClick={() => submitMutation.mutate({ link: submissionLink, phaseId: selectedPhase || currentActivePhaseId })}
+                                      onClick={() => submitMutation.mutate({ link: submissionLink, phaseId: selectedPhase || currentActivePhaseId || "" })}
                                       disabled={!submissionLink || submitMutation.isPending}
                                       size="sm"
                                     >
