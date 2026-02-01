@@ -210,4 +210,64 @@ router.post('/:id/add-skill', async (req, res) => {
     }
 });
 
+// Manual Weekly Reset Trigger (for testing/admin use)
+router.post('/weekly-reset', async (req, res) => {
+    try {
+        const { requestingUserId } = req.body;
+
+        // Only allow admin or owner to trigger manual reset
+        if (requestingUserId) {
+            const requester = await User.findById(requestingUserId);
+            if (!requester || (requester.role !== 'owner' && requester.role !== 'admin')) {
+                return res.status(403).json({ message: 'Only admins and owners can trigger weekly reset' });
+            }
+        }
+
+        console.log('[Manual Weekly Reset] Starting...');
+        const weekStart = new Date();
+        weekStart.setHours(0, 0, 0, 0);
+
+        // Award CLUB-SPECIFIC badges to Top 3 in each club
+        const clubs = await Club.find();
+        let badgesAwarded = 0;
+
+        for (const club of clubs) {
+            const clubMembers = await User.find({ joinedClubs: club._id })
+                .sort({ weeklyXP: -1 })
+                .limit(3);
+
+            for (let i = 0; i < clubMembers.length; i++) {
+                const member = clubMembers[i];
+                const rank = i + 1;
+
+                if (member.weeklyXP && member.weeklyXP > 0) {
+                    member.clubWeeklyBadges = member.clubWeeklyBadges || [];
+                    member.clubWeeklyBadges.push({
+                        clubId: club._id,
+                        clubName: club.name,
+                        rank: rank,
+                        weekStart: weekStart,
+                        earnedAt: new Date()
+                    });
+                    await member.save();
+                    badgesAwarded++;
+                }
+            }
+        }
+
+        // Reset weeklyXP for all users
+        const resetResult = await User.updateMany({}, { weeklyXP: 0 });
+
+        res.json({
+            success: true,
+            message: 'Weekly reset completed',
+            badgesAwarded,
+            usersReset: resetResult.modifiedCount
+        });
+    } catch (err) {
+        console.error('[Manual Weekly Reset] Error:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
 module.exports = router;

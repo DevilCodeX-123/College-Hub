@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
 import {
     Users,
     Settings,
@@ -15,7 +16,6 @@ import {
     Loader2,
     Shield,
     Save,
-    CheckCircle,
     Plus,
     Trash2,
     Check,
@@ -31,7 +31,8 @@ import {
     Swords,
     Zap,
     FolderKanban,
-    X
+    X,
+    Clock
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -58,9 +59,7 @@ interface ClubCoordinatorViewProps {
 }
 
 export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = false }: ClubCoordinatorViewProps) {
-    const { user: authUser } = useAuth();
-    const { toast } = useToast();
-    const queryClient = useQueryClient();
+    const { user } = useAuth();
     const [isManageTeamOpen, setIsManageTeamOpen] = useState(false);
     const [isPromotionOnly, setIsPromotionOnly] = useState(false);
     const [isAssignWorkOpen, setIsAssignWorkOpen] = useState(false);
@@ -71,16 +70,17 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
     // Fetch Club details
     const { data: club, isLoading } = useQuery({
         queryKey: ['club-management', clubId],
-        queryFn: () => api.getClub(clubId, authUser?.id),
+        queryFn: () => api.getClub(clubId, user?.id),
         enabled: !!clubId
     });
 
     // Fetch data for members/team management
     const { data: allUsers = [] } = useQuery<any[]>({
-        queryKey: ['users', collegeName],
-        queryFn: () => api.getUsers(collegeName, authUser?.id),
-        enabled: !!collegeName
+        queryKey: ['users'],
+        queryFn: () => api.getUsers(),
     });
+
+    const clubMembers = allUsers.filter((u: any) => u.joinedClubs?.includes(clubId));
 
     if (isLoading) {
         return (
@@ -100,14 +100,15 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
         );
     }
 
-    const isFullCoordinator = isImpersonating || ['owner', 'admin', 'co_admin', 'club_coordinator', 'club_co_coordinator'].includes(authUser?.role || '');
-    const isSecretary = authUser?.role === 'club_head';
+    const isFullCoordinator = isImpersonating || ['owner', 'admin', 'co_admin', 'club_coordinator', 'club_co_coordinator'].includes(user?.role || '');
+    const isSecretary = user?.role === 'club_head';
     const getDisplayTitle = () => {
         if (!club) return 'Club Management';
         if (isImpersonating) return `Managing: ${club.name}`;
-        if (authUser?.role === 'club_head') return 'Club Secretary Panel';
+        if (user?.role === 'club_head') return 'Club Secretary Panel';
         return 'Club Coordinator Panel';
     };
+
 
     if (isLoading || !club) {
         return (
@@ -149,7 +150,7 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
                                 <span className="text-lg font-medium tracking-wide leading-none">{club.name}</span>
                                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary/50" />
                                 <span className="text-sm font-semibold uppercase tracking-widest text-primary leading-none">
-                                    {isImpersonating ? (authUser?.role === 'owner' ? 'OWNER VIEW' : 'ADMIN VIEW') : `${authUser?.role.replace('_', ' ').toUpperCase()} VIEW`}
+                                    {isImpersonating ? (user?.role === 'owner' ? 'OWNER VIEW' : 'ADMIN VIEW') : `${user?.role?.replace('_', ' ').toUpperCase()} VIEW`}
                                 </span>
                             </div>
                         </div>
@@ -179,7 +180,7 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
                 {/* Overview Tab */}
                 <TabsContent value="overview">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <StatsCard title="Total Members" value={club.memberCount || 0} icon={Users} color="blue" />
+                        <StatsCard title="Total Members" value={clubMembers.length} icon={Users} color="blue" />
                         <StatsCard title="Core Team" value={club.coreTeam?.length || 0} icon={Shield} color="green" />
                         <StatsCard title="Pending Requests" value={club.pendingMembers?.length || 0} icon={UserPlus} color="red" />
                     </div>
@@ -205,6 +206,7 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
                         clubId={clubId}
                         pendingMembers={club.pendingMembers}
                         canManage={true}
+                        users={allUsers}
                         onPromote={(userId) => {
                             setTargetUserId(userId);
                             setDialogTab('core');
@@ -586,15 +588,11 @@ function ClubAchievementsManager({ clubId, achievements = [] }: { clubId: string
     );
 }
 
-function ManageClubMembers({ clubId, pendingMembers, canManage, onPromote }: { clubId: string; pendingMembers?: any[]; canManage?: boolean; onPromote?: (userId: string) => void }) {
+function ManageClubMembers({ clubId, pendingMembers, canManage, onPromote, users = [] }: { clubId: string; pendingMembers?: any[]; canManage?: boolean; onPromote?: (userId: string) => void; users?: any[] }) {
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const { data: users = [], isLoading } = useQuery<any[]>({
-        queryKey: ['users'],
-        queryFn: () => api.getUsers()
-    });
 
-    const clubMembers = (users as any[]).filter((u: any) => u.joinedClubs?.includes(clubId));
+    const clubMembers = users.filter((u: any) => u.joinedClubs?.includes(clubId));
 
     const removeMutation = useMutation({
         mutationFn: (userId: string) => api.removeMemberFromClub(clubId, userId),
@@ -621,8 +619,6 @@ function ManageClubMembers({ clubId, pendingMembers, canManage, onPromote }: { c
             toast({ title: 'Request Rejected' });
         }
     });
-
-    if (isLoading) return <div className="p-8 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div>;
 
     return (
         <div className="space-y-6">
@@ -661,16 +657,19 @@ function ManageClubMembers({ clubId, pendingMembers, canManage, onPromote }: { c
                     <div className="divide-y">
                         {clubMembers.length === 0 ? (
                             <div className="py-12 text-center text-muted-foreground">No members found</div>
-                        ) : clubMembers.map((member: any) => (
+                        ) : clubMembers.map((member: any, index: number) => (
                             <div key={member.id || member._id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-4">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <Avatar className="shrink-0">
                                         <AvatarImage src={member.avatar} />
                                         <AvatarFallback>{member.name?.charAt(0)}</AvatarFallback>
                                     </Avatar>
-                                    <div className="min-w-0">
-                                        <p className="font-bold truncate">{member.name}</p>
-                                        <p className="text-sm text-muted-foreground truncate">{member.role} • {member.points} XP</p>
+                                    <div className="min-w-0 flex items-center gap-2">
+                                        <span className="text-xs font-bold text-muted-foreground min-w-[20px]">{index + 1}.</span>
+                                        <div>
+                                            <p className="font-bold truncate">{member.name}</p>
+                                            <p className="text-sm text-muted-foreground truncate">{member.role} • {member.points} XP</p>
+                                        </div>
                                     </div>
                                 </div>
                                 {canManage && (
@@ -751,19 +750,22 @@ function ManageCoreTeam({ club, canManage, isImpersonating, onManage, onAssignWo
                                 No Coordinator assigned yet.
                             </div>
                         ) : (
-                            coordinators.map((member: any) => (
+                            coordinators.map((member: any, index: number) => (
                                 <div key={member.userId} className="flex items-center justify-between p-4 bg-white hover:bg-amber-50/20 transition-colors">
                                     <div className="flex items-center gap-4">
                                         <div className="h-12 w-12 rounded-full bg-amber-100 border-2 border-amber-200 flex items-center justify-center shadow-inner">
                                             <Crown className="h-6 w-6 text-amber-600" />
                                         </div>
-                                        <div>
-                                            <p className="font-black text-amber-950 text-lg uppercase tracking-tight">{member.name}</p>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <Badge className={`${member.customTitle === 'Faculty Coordinator' ? 'bg-indigo-600 hover:bg-indigo-600' : 'bg-amber-600 hover:bg-amber-600'} font-bold uppercase text-[9px] tracking-widest text-white`}>
-                                                    {member.customTitle || 'Club Coordinator'}
-                                                </Badge>
-                                                {member.customTitle && member.customTitle !== 'Faculty Coordinator' && <Badge variant="secondary" className="text-[10px] font-bold border-amber-200 text-amber-800">{member.customTitle}</Badge>}
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-lg font-black text-amber-900/30 font-mono">#{index + 1}</span>
+                                            <div>
+                                                <p className="font-black text-amber-950 text-lg uppercase tracking-tight">{member.name}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <Badge className={`${member.customTitle === 'Faculty Coordinator' ? 'bg-indigo-600 hover:bg-indigo-600' : 'bg-amber-600 hover:bg-amber-600'} font-bold uppercase text-[9px] tracking-widest text-white`}>
+                                                        {member.customTitle || 'Club Coordinator'}
+                                                    </Badge>
+                                                    {member.customTitle && member.customTitle !== 'Faculty Coordinator' && <Badge variant="secondary" className="text-[10px] font-bold border-amber-200 text-amber-800">{member.customTitle}</Badge>}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -808,17 +810,20 @@ function ManageCoreTeam({ club, canManage, isImpersonating, onManage, onAssignWo
                                 No Secretary assigned yet.
                             </div>
                         ) : (
-                            secretaries.map((member: any) => (
+                            secretaries.map((member: any, index: number) => (
                                 <div key={member.userId} className="flex items-center justify-between p-4 bg-white hover:bg-blue-50/20 transition-colors">
                                     <div className="flex items-center gap-4">
                                         <div className="h-12 w-12 rounded-full bg-blue-100 border-2 border-blue-200 flex items-center justify-center shadow-inner">
                                             <Crown className="h-6 w-6 text-blue-600" />
                                         </div>
-                                        <div>
-                                            <p className="font-black text-blue-950 text-lg uppercase tracking-tight">{member.name}</p>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <Badge className="bg-blue-600 hover:bg-blue-600 font-bold uppercase text-[9px] tracking-widest">{member.role}</Badge>
-                                                {member.customTitle && <Badge variant="secondary" className="text-[10px] font-bold border-blue-200 text-blue-800">{member.customTitle}</Badge>}
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-lg font-black text-blue-900/30 font-mono">#{index + 1}</span>
+                                            <div>
+                                                <p className="font-black text-blue-950 text-lg uppercase tracking-tight">{member.name}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <Badge className="bg-blue-600 hover:bg-blue-600 font-bold uppercase text-[9px] tracking-widest">{member.role}</Badge>
+                                                    {member.customTitle && <Badge variant="secondary" className="text-[10px] font-bold border-blue-200 text-blue-800">{member.customTitle}</Badge>}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -945,9 +950,8 @@ function PollCountdown({ expiresAt }: { expiresAt: string }) {
 
             const h = Math.floor(diff / (1000 * 60 * 60));
             const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            const s = Math.floor((diff % (1000 * 60)) / 1000);
 
-            setTimeLeft(`${h}h ${m}s remaining`);
+            setTimeLeft(`${h}h ${m}m remaining`);
         };
 
         updateTimer();
@@ -1084,13 +1088,212 @@ function ClubBroadcasts({ clubId, clubName }: { clubId: string; clubName: string
 }
 
 function ClubLeaderboard({ clubId }: { clubId: string }) {
+    const { data: users = [], isLoading } = useQuery<any[]>({
+        queryKey: ['club-members', clubId],
+        queryFn: () => api.getUsers()
+    });
+
+    const calculateClubWeeklyXP = (user: any) => {
+        if (!user.pointsHistory) return 0;
+
+        // Find last Monday (Week Start)
+        const now = new Date();
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const weekStart = new Date(now.setDate(diff));
+        weekStart.setHours(0, 0, 0, 0);
+
+        return user.pointsHistory
+            .filter((p: any) =>
+                p.clubId?.toString() === clubId.toString() &&
+                new Date(p.timestamp) >= weekStart
+            )
+            .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    };
+
+    // Filter to get only members of this club and calculate their CLUB-SPECIFIC weekly XP
+    const clubMembers = (users as any[])
+        .filter((u: any) => u.joinedClubs?.includes(clubId))
+        .map(u => ({
+            ...u,
+            clubWeeklyXP: calculateClubWeeklyXP(u)
+        }))
+        .sort((a: any, b: any) => (b.clubWeeklyXP || 0) - (a.clubWeeklyXP || 0));
+
+    if (isLoading) {
+        return (
+            <Card>
+                <CardHeader><CardTitle>Club Rankings</CardTitle></CardHeader>
+                <CardContent>
+                    <div className="flex justify-center py-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    if (clubMembers.length === 0) {
+        return (
+            <Card>
+                <CardHeader><CardTitle>Club Rankings</CardTitle></CardHeader>
+                <CardContent>
+                    <div className="text-center py-12">
+                        <Trophy className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                        <p className="text-muted-foreground">No members in this club yet.</p>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    // Medal colors for top 3
+    const getMedalColor = (rank: number) => {
+        if (rank === 1) return 'text-yellow-500';
+        if (rank === 2) return 'text-gray-400';
+        if (rank === 3) return 'text-amber-600';
+        return 'text-muted-foreground';
+    };
+
+    const getRankBadgeStyle = (rank: number) => {
+        if (rank === 1) return 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-white shadow-lg';
+        if (rank === 2) return 'bg-gradient-to-r from-gray-300 to-gray-500 text-white shadow-md';
+        if (rank === 3) return 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-md';
+        return 'bg-muted text-muted-foreground';
+    };
+
+    // Count weekly badges for a member for this specific club
+    const getWeeklyBadgeCount = (member: any, rank: number) => {
+        if (!member.clubWeeklyBadges) return 0;
+        return member.clubWeeklyBadges.filter((b: any) =>
+            b.clubId?.toString() === clubId.toString() && b.rank === rank
+        ).length;
+    };
+
     return (
         <Card>
-            <CardHeader><CardTitle>Club Rankings</CardTitle></CardHeader>
-            <CardContent>
-                <div className="text-center py-12">
-                    <Trophy className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                    <p className="text-muted-foreground">Rankings coming soon.</p>
+            <CardHeader className="border-b">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <Trophy className="h-5 w-5 text-yellow-500" />
+                            Weekly Club Rankings
+                        </CardTitle>
+                        <CardDescription>
+                            Performance for current week • Resets every Monday
+                        </CardDescription>
+                    </div>
+                    <Badge variant="outline" className="font-bold">
+                        {clubMembers.length} Member{clubMembers.length !== 1 ? 's' : ''}
+                    </Badge>
+                </div>
+            </CardHeader>
+            <CardContent className="p-0">
+                <div className="divide-y">
+                    {clubMembers.map((member: any, index: number) => {
+                        const rank = index + 1;
+                        const isTopThree = rank <= 3;
+                        const goldCount = getWeeklyBadgeCount(member, 1);
+                        const silverCount = getWeeklyBadgeCount(member, 2);
+                        const bronzeCount = getWeeklyBadgeCount(member, 3);
+                        const hasBadges = goldCount > 0 || silverCount > 0 || bronzeCount > 0;
+
+                        return (
+                            <div
+                                key={member.id || member._id}
+                                className={cn(
+                                    "flex items-center gap-4 p-4 transition-colors",
+                                    isTopThree ? "bg-gradient-to-r from-secondary/20 to-transparent" : "hover:bg-muted/30"
+                                )}
+                            >
+                                {/* Rank Badge */}
+                                <div className={cn(
+                                    "shrink-0 h-10 w-10 rounded-full flex items-center justify-center font-black text-lg",
+                                    getRankBadgeStyle(rank)
+                                )}>
+                                    {rank <= 3 ? (
+                                        <Trophy className={cn("h-5 w-5", getMedalColor(rank))} />
+                                    ) : (
+                                        <span className="text-sm">{rank}</span>
+                                    )}
+                                </div>
+
+                                {/* Avatar */}
+                                <Avatar className={cn(
+                                    "h-12 w-12",
+                                    isTopThree && "ring-2 ring-yellow-400 shadow-lg"
+                                )}>
+                                    <AvatarImage src={member.avatar} />
+                                    <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                                        {member.name?.charAt(0)}
+                                    </AvatarFallback>
+                                </Avatar>
+
+                                {/* Member Info */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <p className={cn(
+                                            "font-bold truncate",
+                                            isTopThree && "text-lg"
+                                        )}>
+                                            {member.name}
+                                        </p>
+                                        {rank === 1 && (
+                                            <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white text-[8px] px-1.5 py-0">
+                                                🏆 CHAMPION
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                        <Badge variant="outline" className="text-[9px] font-medium uppercase">
+                                            {member.role?.replace(/_/g, ' ')}
+                                        </Badge>
+                                        {member.level && (
+                                            <span className="text-[10px] text-muted-foreground font-medium">
+                                                Level {member.level}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {/* Weekly Badge History */}
+                                    {hasBadges && (
+                                        <div className="flex items-center gap-1.5 mt-1.5">
+                                            {goldCount > 0 && (
+                                                <div className="flex items-center gap-0.5 bg-yellow-100 border border-yellow-300 rounded-full px-1.5 py-0.5">
+                                                    <span className="text-[10px] font-bold text-yellow-700">🥇</span>
+                                                    <span className="text-[9px] font-black text-yellow-800">×{goldCount}</span>
+                                                </div>
+                                            )}
+                                            {silverCount > 0 && (
+                                                <div className="flex items-center gap-0.5 bg-gray-100 border border-gray-300 rounded-full px-1.5 py-0.5">
+                                                    <span className="text-[10px] font-bold text-gray-600">🥈</span>
+                                                    <span className="text-[9px] font-black text-gray-700">×{silverCount}</span>
+                                                </div>
+                                            )}
+                                            {bronzeCount > 0 && (
+                                                <div className="flex items-center gap-0.5 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5">
+                                                    <span className="text-[10px] font-bold text-amber-700">🥉</span>
+                                                    <span className="text-[9px] font-black text-amber-800">×{bronzeCount}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Points */}
+                                <div className="text-right shrink-0">
+                                    <p className={cn(
+                                        "font-black text-2xl tracking-tighter",
+                                        isTopThree ? "text-primary" : "text-muted-foreground"
+                                    )}>
+                                        {member.clubWeeklyXP || 0}
+                                    </p>
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">
+                                        CLUB XP
+                                    </p>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </CardContent>
         </Card>

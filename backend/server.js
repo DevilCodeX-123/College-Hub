@@ -46,6 +46,8 @@ cron.schedule('0 0 * * 1', async () => {
     console.log('Running Weekly Leaderboard Reset & Reward System...');
     try {
         const weekNo = getWeekNumber(new Date());
+        const weekStart = new Date();
+        weekStart.setHours(0, 0, 0, 0);
 
         // Award badges to Top 3 in each college
         const colleges = await User.distinct('college');
@@ -67,6 +69,34 @@ cron.schedule('0 0 * * 1', async () => {
                     earnedAt: new Date()
                 });
                 await user.save();
+            }
+        }
+
+        // Award CLUB-SPECIFIC badges to Top 3 in each club
+        console.log('[Weekly Reset] Awarding club-specific badges...');
+        const clubs = await Club.find();
+        for (const club of clubs) {
+            const clubMembers = await User.find({ joinedClubs: club._id })
+                .sort({ weeklyXP: -1 })
+                .limit(3);
+
+            for (let i = 0; i < clubMembers.length; i++) {
+                const member = clubMembers[i];
+                const rank = i + 1;
+
+                // Only award if they earned some XP this week
+                if (member.weeklyXP && member.weeklyXP > 0) {
+                    member.clubWeeklyBadges = member.clubWeeklyBadges || [];
+                    member.clubWeeklyBadges.push({
+                        clubId: club._id,
+                        clubName: club.name,
+                        rank: rank,
+                        weekStart: weekStart,
+                        earnedAt: new Date()
+                    });
+                    await member.save();
+                    console.log(`[Weekly Reset] Awarded rank ${rank} badge to ${member.name} for ${club.name}`);
+                }
             }
         }
 

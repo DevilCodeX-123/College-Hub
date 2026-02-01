@@ -254,6 +254,7 @@ router.post('/verify-completion', async (req, res) => {
             reason: `Verified completion of challenge: ${challenge.title}`,
             sourceId: challenge._id,
             sourceType: 'challenge',
+            clubId: challenge.clubId,
             timestamp: new Date()
         });
 
@@ -779,6 +780,7 @@ router.put('/:id', async (req, res) => {
                         reason: `Finished challenge with ${sub.marks}/100 marks: ${challenge.title}`,
                         sourceId: challenge._id,
                         sourceType: 'challenge',
+                        clubId: challenge.clubId,
                         timestamp: new Date()
                     });
 

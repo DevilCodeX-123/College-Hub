@@ -268,6 +268,7 @@ router.post('/:id/complete', async (req, res) => {
                         reason: `Attended event: ${event.title}`,
                         sourceId: event._id,
                         sourceType: 'event',
+                        clubId: event.clubId,
                         timestamp: new Date()
                     });
 
@@ -290,6 +291,7 @@ router.post('/:id/complete', async (req, res) => {
                                 reason: `Attended event as team member: ${event.title}`,
                                 sourceId: event._id,
                                 sourceType: 'event',
+                                clubId: event.clubId,
                                 timestamp: new Date()
                             });
 
@@ -323,6 +325,7 @@ router.post('/:id/complete', async (req, res) => {
                             reason: `Won ${winner.position} place in event: ${event.title}`,
                             sourceId: event._id,
                             sourceType: 'event',
+                            clubId: event.clubId,
                             timestamp: new Date()
                         });
 
@@ -344,6 +347,7 @@ router.post('/:id/complete', async (req, res) => {
                                     reason: `Won ${winner.position} place (team) in event: ${event.title}`,
                                     sourceId: event._id,
                                     sourceType: 'event',
+                                    clubId: event.clubId,
                                     timestamp: new Date()
                                 });
 

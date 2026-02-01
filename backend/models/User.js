@@ -26,6 +26,13 @@ const userSchema = new mongoose.Schema({
         clubName: String,
         earnedAt: { type: Date, default: Date.now }
     }],
+    clubWeeklyBadges: [{
+        clubId: { type: mongoose.Schema.Types.ObjectId, ref: 'Club' },
+        clubName: String,
+        rank: { type: Number, enum: [1, 2, 3] }, // 1 = Gold, 2 = Silver, 3 = Bronze
+        weekStart: Date, // Monday of the week when badge was earned
+        earnedAt: { type: Date, default: Date.now }
+    }],
     joinedClubs: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Club' }],
     blocked: {
         website: { type: Boolean, default: false },
@@ -47,7 +54,13 @@ const userSchema = new mongoose.Schema({
         reason: String,
         timestamp: { type: Date, default: Date.now },
         sourceId: String, // ID of challenge, project, etc.
-        sourceType: { type: String, enum: ['challenge', 'project', 'event', 'bonus', 'initial'] }
+        sourceType: { type: String, enum: ['challenge', 'project', 'event', 'bonus', 'initial'] },
+        clubId: { type: mongoose.Schema.Types.ObjectId, ref: 'Club' }
+    }],
+    weeklyXPHistory: [{
+        week: Date, // Monday of the week
+        xp: Number,
+        clubId: { type: mongoose.Schema.Types.ObjectId, ref: 'Club' }
     }],
     lastLoginDate: Date
 }, { timestamps: true });

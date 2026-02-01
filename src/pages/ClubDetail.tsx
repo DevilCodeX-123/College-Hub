@@ -286,7 +286,7 @@ function ClubDetailContent() {
                   <Users className="h-4 w-4" />
                   {actualMemberCount} {actualMemberCount === 1 ? 'member' : 'members'}
                 </span>
-                <span>Coordinator: {club?.coordinator || 'Not Assigned'}</span>
+                <span>Coordinator: {club?.coordinator || 'Revealed Soon'}</span>
               </div>
             </div>
 

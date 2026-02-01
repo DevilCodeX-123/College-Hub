@@ -494,9 +494,9 @@ async function syncClubMetadata(clubId) {
         club.memberCount = memberCount;
 
         // 2. Sync Coordinator Name
-        // Find the user who is 'club_coordinator' or 'club_head' in the coreTeam
-        // Priority: Coordinator > Head > First Core Member
-        let coordinatorName = club.coordinator;
+        // Priority: Coordinator > Head
+        let coordinatorName = null;
+        let coordinatorId = null;
 
         // Check Core Team array first
         const coordinatorObj = club.coreTeam.find(m => m.role === 'club_coordinator') ||
@@ -504,13 +504,11 @@ async function syncClubMetadata(clubId) {
 
         if (coordinatorObj) {
             coordinatorName = coordinatorObj.name;
-            club.coordinatorId = coordinatorObj.userId;
-        } else {
-            // Fallback: Check Users collection for anyone with this club and coordinator role
-            // This is expensive so we rely mostly on coreTeam
+            coordinatorId = coordinatorObj.userId;
         }
 
         club.coordinator = coordinatorName;
+        club.coordinatorId = coordinatorId;
         await club.save();
         console.log(`[Sync] Club ${club.name} synced: ${memberCount} members, Coord: ${coordinatorName}`);
     } catch (e) {

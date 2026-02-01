@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Clock, Users, Zap, ChevronRight, Check, Loader2, Info, Gift, MessageCircle, Send, AlertCircle } from 'lucide-react';
 import { Challenge } from '@/types';
-import { differenceInDays, formatDistanceToNow, isBefore, endOfDay } from 'date-fns';
+import { differenceInDays, formatDistanceToNow, isBefore, endOfDay, format, isToday } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -308,9 +308,11 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
               <span>
                 {(isPastDeadline || challenge.status === 'completed')
                   ? 'Ended'
-                  : daysLeft === 0
+                  : (isValidDate && isToday(deadlineDate))
                     ? 'Ends today'
-                    : `${daysLeft} days left`}
+                    : isValidDate
+                      ? `Ends ${format(deadlineDate, 'MMM d')}`
+                      : 'Ongoing'}
               </span>
             </div>
             <div className="flex gap-2">
@@ -612,7 +614,6 @@ export function ChallengeCard({ challenge, onViewReport, initialLeaderboard }: C
                         const minSize = challenge.minTeamSize || 2;
                         const maxSize = challenge.maxTeamSize || 4;
                         const isValidSize = teamSize >= minSize && teamSize <= maxSize;
-                        const isLeader = user?.id === myTeam.leaderId || user?.id === (myTeam.leaderId as any)?._id;
 
                         return (
                           <div className="flex items-center gap-2 text-xs">
