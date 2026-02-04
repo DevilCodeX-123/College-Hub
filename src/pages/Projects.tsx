@@ -1,17 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Plus, Clock, Users, ChevronRight, Loader2, Key, Shield, MessageSquare, CheckCircle, CheckCircle2, Target, Link as LinkIcon, Trash2, ExternalLink, AlertCircle, Calendar, Zap, Edit, Save } from 'lucide-react';
-import { Slider } from '@/components/ui/slider';
+import { Plus, Clock, Users, ChevronRight, Loader2, Key, Shield, MessageSquare, CheckCircle2, Target, Link as LinkIcon, Trash2, AlertCircle, Zap, Edit, Save, Pause, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Project, Club } from '@/types';
+import { Project, Club, type User } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -22,6 +20,16 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -38,8 +46,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function Projects() {
   const { user } = useAuth();
@@ -47,8 +54,21 @@ export default function Projects() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Confirmation Dialog State
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{ title: string; description: string; onConfirm: () => void }>({
+    title: '',
+    description: '',
+    onConfirm: () => { }
+  });
+
+  const handleConfirmAction = (title: string, description: string, onConfirm: () => void) => {
+    setConfirmConfig({ title, description, onConfirm });
+    setConfirmDialogOpen(true);
+  };
+
   // Safety logic for dates to prevent white screen crashes
-  const safeFormat = (date: any, formatStr: string) => {
+  const safeFormat = (date: string | Date | null | undefined, formatStr: string) => {
     try {
       if (!date) return 'TBA';
       const d = new Date(date);
@@ -64,7 +84,6 @@ export default function Projects() {
   const [joinCode, setJoinCode] = useState('');
   const [openNew, setOpenNew] = useState(false);
   const [openJoin, setOpenJoin] = useState(false);
-  const [search, setSearch] = useState('');
 
   useEffect(() => {
     localStorage.setItem('last_viewed_projects', new Date().toISOString());
@@ -86,7 +105,7 @@ export default function Projects() {
   const [joinRequestData, setJoinRequestData] = useState({ reason: '', skills: '', experiences: '', comments: '' });
 
   const requestJoinMutation = useMutation({
-    mutationFn: (data: any) => api.requestJoinProject(selectedProject?.id || selectedProject?._id, { ...data, userId: user?.id || '' }),
+    mutationFn: (data: { reason: string; skills: string; experiences: string; comments: string }) => api.requestJoinProject((selectedProject?.id || selectedProject?._id || '') as string, { ...data, userId: user?.id || '' }),
     onSuccess: () => {
       toast({ title: 'Request Sent', description: 'The project leader will review your request.' });
       setJoinRequestData({ reason: '', skills: '', experiences: '', comments: '' });
@@ -99,9 +118,9 @@ export default function Projects() {
   const resolveRequestMutation = useMutation({
     mutationFn: ({ requestId, status }: { requestId: string, status: 'accepted' | 'rejected' }) => {
       const uId = user?.id || (user as any)?._id;
-      return api.resolveProjectJoinRequest(selectedProject?.id || selectedProject?._id, requestId, { status, requestingUserId: uId || '' });
+      return api.resolveProjectJoinRequest((selectedProject?.id || selectedProject?._id || '') as string, requestId, { status, requestingUserId: uId || '' });
     },
-    onSuccess: (updated) => {
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       toast({ title: `Recruitment ${resolveRequestMutation.variables?.status || 'Resolved'}` });
@@ -123,7 +142,7 @@ export default function Projects() {
     }
   }, []);
 
-  const { data: projects = [], isLoading, error } = useQuery({
+  const { data: projects = [], isLoading, error } = useQuery<Project[]>({
     queryKey: ['projects', user?.college],
     queryFn: () => api.getProjects(user?.college, undefined, undefined, user?.id || user?._id),
     enabled: !!user?.college
@@ -146,7 +165,7 @@ export default function Projects() {
   }, [projects, selectedProject]);
 
   const createProposalMutation = useMutation({
-    mutationFn: (data: any) => api.createProject(data),
+    mutationFn: (data: Partial<Project>) => api.createProject(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setOpenNew(false);
@@ -225,19 +244,9 @@ export default function Projects() {
     },
   });
 
-  const updateProgressMutation = useMutation({
-    mutationFn: ({ id, progress }: { id: string, progress: number }) =>
-      api.updateProjectProgress(id, progress, user?.id || ''),
-    onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setSelectedProject(updated);
-      toast({ title: 'Progress Updated' });
-    }
-  });
-
   const addGoalMutation = useMutation({
-    mutationFn: (goal: any) => api.addProjectGoal(selectedProject?.id || selectedProject?._id, { ...goal, requestingUserId: user?.id }),
-    onSuccess: (updated) => {
+    mutationFn: (goal: any) => api.addProjectGoal((selectedProject?.id || selectedProject?._id || '') as string, { ...goal, requestingUserId: user?.id }),
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       setGoalData({ title: '', description: '', deadline: '', requirementKey: '', assignedType: 'specific', assignees: [] });
@@ -254,44 +263,22 @@ export default function Projects() {
 
   const deleteGoalMutation = useMutation({
     mutationFn: (goalId: string) =>
-      api.deleteProjectGoal(selectedProject?.id || selectedProject?._id, goalId, user?.id || ''),
-    onSuccess: (updated) => {
+      api.deleteProjectGoal((selectedProject?.id || selectedProject?._id || '') as string, goalId, user?.id || ''),
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       toast({ title: 'Goal Removed' });
     }
   });
 
-  const submitGoalMutation = useMutation({
-    mutationFn: ({ goalId, link, title, description, key }: { goalId: string, link: string, title?: string, description?: string, key?: string }) =>
-      api.submitProjectGoal(selectedProject?.id || selectedProject?._id, goalId, link, user?.id || '', title, description, key),
-    onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setSelectedProject(updated);
-      setSubmissionLink('');
-      setSubmissionTitle('');
-      setSubmissionDescription('');
-      setSubmissionKey('');
-      setSubmittingGoalId(null);
-      toast({ title: 'Goal Submitted!' });
-    },
-    onError: (err: any) => {
-      toast({
-        title: 'Submission Failed',
-        description: err.response?.data?.message || 'Deadline may have passed.',
-        variant: 'destructive'
-      });
-    }
-  });
-
   const addResourceMutation = useMutation({
     mutationFn: (resource: any) =>
-      api.addProjectResource(selectedProject?.id || selectedProject?._id, {
+      api.addProjectResource((selectedProject?.id || selectedProject?._id || '') as string, {
         ...resource,
         addedBy: user?.id,
         addedByName: user?.name
       }),
-    onSuccess: (updated) => {
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       setResourceData({ title: '', description: '', url: '' });
@@ -301,8 +288,8 @@ export default function Projects() {
 
   const deleteResourceMutation = useMutation({
     mutationFn: (resourceId: string) =>
-      api.deleteProjectResource(selectedProject?.id || selectedProject?._id, resourceId, user?.id || ''),
-    onSuccess: (updated) => {
+      api.deleteProjectResource((selectedProject?.id || selectedProject?._id || '') as string, resourceId, user?.id || ''),
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       toast({ title: 'Resource Removed' });
@@ -325,28 +312,9 @@ export default function Projects() {
     assignees: []
   });
 
-  const [editingMissionId, setEditingMissionId] = useState<string | null>(null);
-  const [missionEditData, setMissionEditData] = useState<{
-    deadline: string;
-    assignees: string[];
-    assignedType: 'all' | 'specific';
-    requirementKey: string;
-    submissionKey: string;
-  }>({ deadline: '', assignees: [], assignedType: 'specific', requirementKey: '', submissionKey: '' });
-
-  const updateGoalMutation = useMutation({
-    mutationFn: (data: any) => api.updateProjectGoal(selectedProject?.id || selectedProject?._id, editingMissionId!, { ...data, requestingUserId: user?.id || '' }),
-    onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setSelectedProject(updated);
-      setEditingMissionId(null);
-      toast({ title: 'Mission Updated' });
-    }
-  });
-
   const postponeGoalMutation = useMutation({
-    mutationFn: (data: any) => api.updateProjectGoal(selectedProject?.id || selectedProject?._id, postponingGoalId!, { ...data, requestingUserId: user?.id || '' }),
-    onSuccess: (updated) => {
+    mutationFn: (data: any) => api.updateProjectGoal((selectedProject?.id || selectedProject?._id || '') as string, postponingGoalId!, { ...data, requestingUserId: user?.id || '' }),
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       setPostponingGoalId(null);
@@ -365,8 +333,8 @@ export default function Projects() {
   const [newDeadline, setNewDeadline] = useState('');
 
   const accomplishGoalMutation = useMutation({
-    mutationFn: (goalId: string) => api.accomplishProjectGoal(selectedProject?.id || selectedProject?._id, goalId, user?.id || ''),
-    onSuccess: (updated) => {
+    mutationFn: (goalId: string) => api.accomplishProjectGoal((selectedProject?.id || selectedProject?._id || '') as string, goalId, user?.id || ''),
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       toast({ title: 'Mission Accomplished' });
@@ -375,7 +343,7 @@ export default function Projects() {
 
   const requestPostponeMutation = useMutation({
     mutationFn: (data: { requestedDate: string, personalNote: string }) =>
-      api.requestMissionPostpone(selectedProject?.id || selectedProject?._id, memberRequestingPostponeId!, { ...data, requestingUserId: user?.id || '' }),
+      api.requestMissionPostpone((selectedProject?.id || selectedProject?._id || '') as string, memberRequestingPostponeId!, { ...data, requestingUserId: user?.id || '' }),
     onSuccess: () => {
       setMemberRequestingPostponeId(null);
       setRequestedDate('');
@@ -388,19 +356,12 @@ export default function Projects() {
   const [requestedDate, setRequestedDate] = useState('');
   const [personalNote, setPersonalNote] = useState('');
   const [resourceData, setResourceData] = useState({ title: '', description: '', url: '' });
-  const [tempProgress, setTempProgress] = useState(0);
-  const [submissionLink, setSubmissionLink] = useState('');
-  const [submissionTitle, setSubmissionTitle] = useState('');
-  const [submissionDescription, setSubmissionDescription] = useState('');
-  const [submissionKey, setSubmissionKey] = useState('');
-  const [submittingGoalId, setSubmittingGoalId] = useState<string | null>(null);
 
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editedDetails, setEditedDetails] = useState({ problemStatement: '', idea: '', description: '', teamName: '' });
 
   useEffect(() => {
     if (selectedProject) {
-      setTempProgress(selectedProject.progress || 0);
       setEditedDetails({
         problemStatement: selectedProject.problemStatement || '',
         idea: selectedProject.idea || '',
@@ -411,27 +372,17 @@ export default function Projects() {
   }, [selectedProject]);
 
   const removeMemberMutation = useMutation({
-    mutationFn: (memberId: string) => api.removeProjectMember(selectedProject?.id || selectedProject?._id, memberId, user?.id || ''),
-    onSuccess: (updated) => {
+    mutationFn: (memberId: string) => api.removeProjectMember((selectedProject?.id || selectedProject?._id || '') as string, memberId, user?.id || ''),
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       toast({ title: 'Member Removed' });
     }
   });
 
-  const reviewGoalMutation = useMutation({
-    mutationFn: ({ goalId, status }: { goalId: string, status: 'approved' | 'rejected' }) =>
-      api.reviewProjectGoal(selectedProject?.id || selectedProject?._id, goalId, status, user?.id || ''),
-    onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setSelectedProject(updated);
-      toast({ title: 'Submission Reviewed' });
-    }
-  });
-
   const updateDetailsMutation = useMutation({
-    mutationFn: (data: any) => api.updateProjectDetails(selectedProject?.id || selectedProject?._id, { ...data, requestingUserId: user?.id || '' }),
-    onSuccess: (updated) => {
+    mutationFn: (data: any) => api.updateProjectDetails((selectedProject?.id || selectedProject?._id || '') as string, { ...data, requestingUserId: user?.id || '' }),
+    onSuccess: (updated: Project) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setSelectedProject(updated);
       setIsEditingDetails(false);
@@ -442,7 +393,7 @@ export default function Projects() {
   const handleProposalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!proposalData.clubId) return toast({ title: 'Please select a target club', variant: 'destructive' });
-    const selectedClub = clubs.find((c: any) => (c.id || c._id) === proposalData.clubId);
+    const selectedClub = clubs.find((c: Club) => (c.id || (c as any)._id) === proposalData.clubId);
     createProposalMutation.mutate({
       ...proposalData,
       requestedBy: user?.id,
@@ -460,13 +411,13 @@ export default function Projects() {
   const isMember = (project: Project | null) => {
     if (!project) return false;
     const uId = user?.id || (user as any)?._id;
-    const isTeamMember = project.team?.some((m: any) => {
+    const isTeamMember = project.team?.some((m: string | User) => {
       if (!m) return false;
-      const mId = typeof m === 'string' ? m : (m.id || m._id);
+      const mId = typeof m === 'string' ? m : (m as any).id || (m as any)._id;
       return mId === uId;
     });
     const leader = project.requestedBy;
-    const leaderId = typeof leader === 'string' ? leader : (leader?.id || leader?._id);
+    const leaderId = typeof leader === 'string' ? leader : leader?.id || (leader as any)?._id;
     const isProjectLeader = leaderId === uId;
 
     return isTeamMember || isProjectLeader;
@@ -479,6 +430,8 @@ export default function Projects() {
     const isOwner = user?.role === 'owner' || user?.role === 'admin';
     return uId === leaderId || isOwner;
   };
+
+  const isPaused = selectedProject?.status === 'on_hold';
 
 
   const handleViewDetails = (project: any) => {
@@ -631,6 +584,16 @@ export default function Projects() {
                       </div>
                     </CardHeader>
 
+                    {isPaused && (
+                      <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-3xl flex items-center gap-3 text-amber-800 animate-pulse">
+                        <Pause className="h-6 w-6 fill-amber-500" />
+                        <div className="flex-1">
+                          <p className="text-xs font-black uppercase tracking-widest">Operation Suspended</p>
+                          <p className="text-[10px] font-bold">This project is currently on hold. All tactical interactions are disabled.</p>
+                        </div>
+                      </div>
+                    )}
+
                     <Tabs defaultValue="overview" className="w-full">
                       <TabsList className="grid w-full grid-cols-3 h-14 bg-slate-100/50 p-1.5 rounded-[2rem] border-2">
                         <TabsTrigger value="overview" className="rounded-[1.5rem] text-[11px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-primary transition-all">Overview</TabsTrigger>
@@ -644,7 +607,7 @@ export default function Projects() {
                         <div className="flex items-center justify-between">
                           <Badge className="font-black text-[10px] uppercase tracking-[0.2em] bg-primary/10 text-primary border-primary/20 px-4">Strategic Briefing</Badge>
                           {isLeader(selectedProject) && (
-                            <Button size="sm" variant="outline" className="h-9 px-4 text-[10px] font-bold uppercase rounded-full border-2 hover:bg-slate-50" onClick={() => { setIsEditingDetails(!isEditingDetails); if (isEditingDetails) updateDetailsMutation.mutate(editedDetails); }}>
+                            <Button size="sm" variant="outline" className="h-9 px-4 text-[10px] font-bold uppercase rounded-full border-2 hover:bg-slate-50" onClick={() => { setIsEditingDetails(!isEditingDetails); if (isEditingDetails) updateDetailsMutation.mutate(editedDetails); }} disabled={isPaused}>
                               {isEditingDetails ? <><Save className="h-3.5 w-3.5 mr-2" /> Save Changes</> : <><Edit className="h-3.5 w-3.5 mr-2" /> Modify Intel</>}
                             </Button>
                           )}
@@ -670,17 +633,35 @@ export default function Projects() {
                                 <Label className="text-[9px] font-black uppercase text-primary tracking-[0.3em]">Project Authorization Key</Label>
                                 <div className="flex items-center gap-3">
                                   <code className="text-3xl font-black tracking-[0.4em] text-primary">{selectedProject.joinCode || '------'}</code>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8 rounded-full text-primary opacity-0 group-hover/code:opacity-100 transition-opacity"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(selectedProject.joinCode || '');
-                                      toast({ title: 'Code Copied', description: 'Authorization Key added to clipboard.' });
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-8 w-8 rounded-full text-primary"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(selectedProject.joinCode || '');
+                                        toast({ title: 'Code Copied', description: 'Authorization Key added to clipboard.' });
+                                      }}
+                                    >
+                                      <Copy className="h-4 w-4" />
+                                    </Button>
+                                    {isLeader(selectedProject) && selectedProject.joinCode && (
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8 rounded-full text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                                        onClick={() => {
+                                          handleConfirmAction(
+                                            'Clear Authorization Key?',
+                                            'This will prevent new members from joining via code. You can generate a new one later.',
+                                            () => updateDetailsMutation.mutate({ joinCode: '' })
+                                          );
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                                 <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Share this code for instant team enlistment</p>
                               </div>
@@ -690,7 +671,7 @@ export default function Projects() {
                           <div className="space-y-4">
                             <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Assigned Force ({selectedProject.team?.length || 0})</Label>
                             <div className="grid gap-3">
-                              {selectedProject.team?.map((member: any, i: number) => {
+                              {selectedProject.team?.map((member: string | User, i: number) => {
                                 const mId = typeof member === 'string' ? member : member.id || member._id;
                                 const mName = typeof member === 'string' ? `User ${member.slice(-4)}` : member.name || "Unknown";
                                 const isSelf = mId === user?.id;
@@ -712,9 +693,11 @@ export default function Projects() {
                                         variant="ghost"
                                         className="h-8 w-8 text-rose-500 opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-50 rounded-full"
                                         onClick={() => {
-                                          if (confirm(`Remove ${mName} from this project?`)) {
-                                            removeMemberMutation.mutate(mId);
-                                          }
+                                          handleConfirmAction(
+                                            'Remove Team Member?',
+                                            `Are you sure you want to extract ${mName} from this project force?`,
+                                            () => removeMemberMutation.mutate(mId)
+                                          );
                                         }}
                                       >
                                         <Trash2 className="h-4 w-4" />
@@ -731,16 +714,16 @@ export default function Projects() {
                       <TabsContent value="management" className="space-y-6 pt-6">
                         <div className="space-y-8">
                           {/* Leader-only: Recruit Candidates Section */}
-                          {isLeader(selectedProject) && selectedProject.joinRequests?.some((r: any) => r.status === 'pending') && (
+                          {isLeader(selectedProject) && selectedProject.joinRequests?.some((r) => r.status === 'pending') && (
                             <div className="space-y-4 p-8 rounded-[3rem] bg-amber-50/50 border-2 border-amber-100 shadow-inner">
                               <div className="flex items-center justify-between border-b border-amber-200/40 pb-4 mb-2">
                                 <Label className="font-black text-amber-800 text-[11px] uppercase tracking-[0.3em] flex items-center gap-2">
                                   <Users className="h-5 w-5" /> RECRUITMENT COMMAND
                                 </Label>
-                                <Badge className="bg-amber-100 text-amber-700 border-none font-black text-[9px] uppercase">{selectedProject.joinRequests.filter((r: any) => r.status === 'pending').length} PENDING</Badge>
+                                <Badge className="bg-amber-100 text-amber-700 border-none font-black text-[9px] uppercase">{selectedProject.joinRequests.filter((r) => r.status === 'pending').length} PENDING</Badge>
                               </div>
                               <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                                {selectedProject.joinRequests.filter((r: any) => r.status === 'pending').map((req: any, i: number) => (
+                                {selectedProject.joinRequests.filter((r) => r.status === 'pending').map((req, i: number) => (
                                   <Card key={i} className="border-2 border-amber-200/30 rounded-3xl overflow-hidden shadow-sm bg-white/80 hover:bg-white transition-all">
                                     <CardContent className="p-6">
                                       <div className="flex flex-col md:flex-row justify-between items-start gap-6">
@@ -763,8 +746,8 @@ export default function Projects() {
                                           </div>
                                         </div>
                                         <div className="flex md:flex-col gap-2 w-full md:w-auto shrink-0">
-                                          <Button size="sm" className="flex-1 h-12 md:w-32 bg-amber-600 hover:bg-amber-700 text-white font-black uppercase tracking-widest rounded-xl text-[10px]" onClick={() => resolveRequestMutation.mutate({ requestId: req._id, status: 'accepted' })}>Authorize</Button>
-                                          <Button size="sm" variant="ghost" className="flex-1 h-12 md:w-32 text-amber-700/50 hover:text-rose-500 font-black uppercase tracking-widest hover:bg-rose-50 rounded-xl text-[10px]" onClick={() => {
+                                          <Button size="sm" className="flex-1 h-12 md:w-32 bg-amber-600 hover:bg-amber-700 text-white font-black uppercase tracking-widest rounded-xl text-[10px]" onClick={() => resolveRequestMutation.mutate({ requestId: req._id, status: 'accepted' })} disabled={isPaused}>Authorize</Button>
+                                          <Button size="sm" variant="ghost" className="flex-1 h-12 md:w-32 text-amber-700/50 hover:text-rose-500 font-black uppercase tracking-widest hover:bg-rose-50 rounded-xl text-[10px]" disabled={isPaused} onClick={() => {
                                             const reason = prompt("State reason for rejection (this will be transmitted to the recruit):");
                                             if (reason !== null) {
                                               resolveRequestMutation.mutate({ requestId: req._id, status: 'rejected', rejectionReason: reason } as any);
@@ -793,7 +776,7 @@ export default function Projects() {
                               {isLeader(selectedProject) && (
                                 <Dialog>
                                   <DialogTrigger asChild>
-                                    <Button variant="gradient" size="sm" className="rounded-full px-6 h-10 font-black uppercase tracking-widest text-[10px] shadow-lg shadow-primary/20">
+                                    <Button variant="gradient" size="sm" className="rounded-full px-6 h-10 font-black uppercase tracking-widest text-[10px] shadow-lg shadow-primary/20" disabled={isPaused}>
                                       <Plus className="h-4 w-4 mr-2" /> NEW MISSION
                                     </Button>
                                   </DialogTrigger>
@@ -938,7 +921,7 @@ export default function Projects() {
                                                   <Button
                                                     className="w-full h-14 rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-lg shadow-primary/10 transition-all hover:scale-[1.02]"
                                                     variant={goal.completedBy?.includes(user?.id) ? "secondary" : "gradient"}
-                                                    disabled={goal.completedBy?.includes(user?.id) || accomplishGoalMutation.isPending}
+                                                    disabled={isPaused || goal.completedBy?.includes(user?.id) || accomplishGoalMutation.isPending}
                                                     onClick={() => accomplishGoalMutation.mutate(goal._id)}
                                                   >
                                                     {goal.completedBy?.includes(user?.id) ? (
@@ -951,6 +934,7 @@ export default function Projects() {
                                                     variant="outline"
                                                     className="w-full h-12 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest text-slate-500 hover:bg-amber-50"
                                                     onClick={() => setMemberRequestingPostponeId(goal._id)}
+                                                    disabled={isPaused}
                                                   >
                                                     <AlertCircle className="h-4 w-4 mr-2" /> Request Postpone
                                                   </Button>
@@ -959,7 +943,14 @@ export default function Projects() {
                                                       variant="destructive"
                                                       size="sm"
                                                       className="h-10 rounded-xl opacity-50 hover:opacity-100 font-black text-[9px] uppercase tracking-[0.2em]"
-                                                      onClick={() => { if (confirm('Abort this mission objective?')) deleteGoalMutation.mutate(goal._id); }}
+                                                      disabled={isPaused}
+                                                      onClick={() => {
+                                                        handleConfirmAction(
+                                                          'Abort Mission Objective?',
+                                                          'This action will permanently remove this tactical goal from the mission log.',
+                                                          () => deleteGoalMutation.mutate(goal._id)
+                                                        );
+                                                      }}
                                                     >
                                                       ABORT MISSION
                                                     </Button>
@@ -1007,7 +998,20 @@ export default function Projects() {
                                 </a>
                                 {res.description && <p className="text-[10px] text-muted-foreground">{res.description}</p>}
                               </div>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => { if (confirm('Remove this link?')) deleteResourceMutation.mutate(res._id); }}><Trash2 className="h-3.5 w-3.5" /></Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => {
+                                  handleConfirmAction(
+                                    'Remove Resource Link?',
+                                    'This link will be removed from the mission intel database.',
+                                    () => deleteResourceMutation.mutate(res._id)
+                                  );
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
                           ))}
                         </div>
@@ -1018,7 +1022,7 @@ export default function Projects() {
                             <Input placeholder="URL (https://...)" value={resourceData.url} onChange={(e) => setResourceData({ ...resourceData, url: e.target.value })} className="h-9 text-sm" />
                             <Input placeholder="Description" value={resourceData.description} onChange={(e) => setResourceData({ ...resourceData, description: e.target.value })} className="h-9 text-sm" />
                           </div>
-                          <Button className="w-full h-9" variant="gradient" onClick={() => addResourceMutation.mutate(resourceData)} disabled={!resourceData.title || !resourceData.url || addResourceMutation.isPending}>
+                          <Button className="w-full h-9" variant="gradient" onClick={() => addResourceMutation.mutate(resourceData)} disabled={isPaused || !resourceData.title || !resourceData.url || addResourceMutation.isPending}>
                             {addResourceMutation.isPending ? 'Adding...' : 'Add Link'}
                           </Button>
                         </div>
@@ -1030,14 +1034,47 @@ export default function Projects() {
                         variant="gradient"
                         className="w-full h-16 rounded-3xl font-black uppercase tracking-[0.3em] text-[13px] shadow-2xl shadow-primary/30 group relative overflow-hidden"
                         onClick={() => navigate(`/projects/${selectedProject.id || selectedProject._id}/chat`)}
+                        disabled={isPaused}
                       >
                         <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
                         <MessageSquare className="h-5 w-5 mr-3 group-hover:scale-110 transition-transform" />
-                        Initialize Mission Chat Room
+                        {isPaused ? 'Chat Room Locked' : 'Initialize Mission Chat Room'}
                       </Button>
                       <div className="flex gap-4">
-                        <Button variant="outline" className="flex-1 text-rose-500 border-2 border-rose-100 hover:bg-rose-50 hover:border-rose-200 h-14 rounded-2xl font-black text-[11px] uppercase tracking-widest" onClick={() => { if (confirm('Request immediate extraction from this project?')) exitProjectMutation.mutate({ projectId: selectedProject.id || selectedProject._id, userId: user?.id || '' }); }}>Exit Project</Button>
-                        {isLeader(selectedProject) && <Button variant="secondary" className="flex-1 h-14 rounded-2xl font-black text-[11px] uppercase tracking-widest border-2" onClick={() => { if (confirm('Finalize and complete this project?')) completeProjectMutation.mutate(selectedProject.id || selectedProject._id); }}>Finalize Operation</Button>}
+                        <Button
+                          variant="outline"
+                          className="flex-1 text-rose-500 border-2 border-rose-100 hover:bg-rose-50 hover:border-rose-200 h-14 rounded-2xl font-black text-[11px] uppercase tracking-widest"
+                          onClick={() => {
+                            handleConfirmAction(
+                              'Request Immediate Extraction?',
+                              'Are you sure you want to leave this project? Your contributions will remain but you will lose access to team channels.',
+                              () => {
+                                const pid = selectedProject?.id || selectedProject?._id;
+                                if (pid) exitProjectMutation.mutate({ projectId: pid as string, userId: user?.id || '' });
+                              }
+                            );
+                          }}
+                        >
+                          Exit Project
+                        </Button>
+                        {isLeader(selectedProject) && (
+                          <Button
+                            variant="secondary"
+                            className="flex-1 h-14 rounded-2xl font-black text-[11px] uppercase tracking-widest border-2"
+                            onClick={() => {
+                              handleConfirmAction(
+                                'Finalize Project Operation?',
+                                'This will mark the mission as complete. This action cannot be reversed.',
+                                () => {
+                                  const pid = selectedProject?.id || selectedProject?._id;
+                                  if (pid) completeProjectMutation.mutate(pid as string);
+                                }
+                              );
+                            }}
+                          >
+                            Finalize Operation
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1297,6 +1334,31 @@ export default function Projects() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Layout>
+
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent className="rounded-[2.5rem] border-4 p-8">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-black uppercase tracking-tighter flex items-center gap-2">
+              <AlertCircle className="h-6 w-6 text-rose-500" />
+              {confirmConfig.title}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm font-bold text-slate-500 uppercase tracking-widest leading-relaxed pt-2">
+              {confirmConfig.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex gap-3 pt-6">
+            <AlertDialogCancel className="flex-1 h-14 rounded-2xl font-black uppercase tracking-widest border-2">
+              Abort Deletion
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="flex-1 h-14 rounded-2xl font-black uppercase tracking-widest bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-200"
+              onClick={() => confirmConfig.onConfirm()}
+            >
+              Confirm Operation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Layout >
   );
 }

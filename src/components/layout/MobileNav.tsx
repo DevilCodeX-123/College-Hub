@@ -8,7 +8,7 @@ import {
   Map,
   Shield,
   Crown,
-  Building2,
+
   Target,
   HelpCircle,
   Calendar,
@@ -16,6 +16,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
 
 interface MobileNavProps {
   isOpen: boolean;
@@ -38,6 +40,21 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const { user } = useAuth();
   const location = useLocation();
   const { notifications } = useNotifications();
+  const [managedClubs, setManagedClubs] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchClubs = async () => {
+      if (user?.id && ['club_coordinator', 'club_co_coordinator', 'club_head', 'core_member'].includes(user.role)) {
+        try {
+          const clubs = await api.getManagedClubs(user.id);
+          setManagedClubs(clubs || []);
+        } catch (err) {
+          console.error("Failed to fetch managed clubs for mobile nav:", err);
+        }
+      }
+    };
+    fetchClubs();
+  }, [user?.id, user?.role]);
 
   const getNotificationDot = (itemPath: string) => {
     const normalizedItemPath = itemPath.toLowerCase().replace(/\/$/, '') || '/';
@@ -82,49 +99,73 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           </NavLink>
         ))}
 
-        {/* Management Section for Owner / Staff */}
-        {(user?.role === 'owner' || user?.role === 'admin' || user?.role === 'co_admin' || user?.role === 'club_coordinator' || user?.role === 'club_co_coordinator' || user?.role === 'club_head' || user?.role === 'core_member') && (
-          <>
-            <div className="my-4 border-t border-border/50" />
-            <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Management</p>
+        {/* Management Section - Ensuring only ONE panel is shown per user */}
+        {(() => {
+          const role = user?.role;
+          if (!role) return null;
 
-            {user?.role === 'owner' && (
-              <NavLink to="/owner" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-amber-600 shadow-sm border border-amber-100' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
+          const managementLinks = [];
+
+          if (role === 'owner') {
+            managementLinks.push(
+              <NavLink key="owner" to="/owner" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-amber-600 shadow-sm border border-amber-100' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
                 <Crown className="h-5 w-5" />
                 <span>Owner Panel</span>
               </NavLink>
-            )}
-
-            {(user?.role === 'admin' || user?.role === 'co_admin') && (
-              <NavLink to="/admin" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
+            );
+          } else if (role === 'admin') {
+            managementLinks.push(
+              <NavLink key="admin" to="/admin" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
                 <Shield className="h-5 w-5" />
                 <span>College Admin Panel</span>
               </NavLink>
-            )}
+            );
+          } else if (managedClubs.length > 0) {
+            managedClubs.forEach((club) => {
+              const clubId = club.id || club._id;
 
-            {(user?.role === 'club_coordinator' || user?.role === 'club_co_coordinator') && (
-              <NavLink to="/club-coordinator" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
-                <Shield className="h-5 w-5" />
-                <span>Club Coordinator Panel</span>
-              </NavLink>
-            )}
+              const memberInfo = club.coreTeam?.find((m: any) => m.userId === user?.id);
+              const clubRole = memberInfo?.role || role;
 
-            {user?.role === 'club_head' && (
-              <NavLink to="/club-head" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
-                <Target className="h-5 w-5" />
-                <span>Club Secretary Panel</span>
-              </NavLink>
-            )}
+              let path = "/club-coordinator";
+              let Icon = Shield;
+              let labelSuffix = "Coordinator";
 
-            {user?.role === 'core_member' && (
-              <NavLink to="/core-team" onClick={onClose} className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}>
-                <Users className="h-5 w-5" />
-                <span>Core Team Panel</span>
-              </NavLink>
-            )}
-          </>
-        )}
-      </nav>
+              if (clubRole === 'club_head') {
+                path = "/club-head";
+                Icon = Target;
+                labelSuffix = "Secretary";
+              } else if (clubRole === 'core_member') {
+                path = "/core-team";
+                Icon = Users;
+                labelSuffix = "Core Team";
+              }
+
+              managementLinks.push(
+                <NavLink
+                  key={clubId}
+                  to={`${path}/${clubId}`}
+                  onClick={onClose}
+                  className={({ isActive }) => cn('flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200', isActive ? 'bg-white text-primary shadow-sm border border-border/50' : 'text-slate-600 hover:text-foreground hover:bg-slate-50')}
+                >
+                  <Icon className="h-5 w-5" />
+                  <span>{club.name} {labelSuffix}</span>
+                </NavLink>
+              );
+            });
+          }
+
+          if (managementLinks.length === 0) return null;
+
+          return (
+            <div className="pt-4 mt-4 border-t border-border/50">
+              <p className="px-4 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em]">Management</p>
+              <div className="space-y-1 px-2">
+                {managementLinks}
+              </div>
+            </div>
+          );
+        })()}</nav>
     </div>
   );
 }

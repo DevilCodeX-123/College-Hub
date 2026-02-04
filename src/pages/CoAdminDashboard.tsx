@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -14,13 +13,14 @@ import {
     MapPin,
     Settings,
     ShieldAlert,
-    UserPlus,
     FolderKanban,
-    Plus,
     FileText,
     Activity,
-    Loader2
+    Loader2,
+    Megaphone
 } from 'lucide-react';
+import { AdRequestForm } from '@/components/common/AdRequestForm';
+import { MyAdRequests } from '@/components/common/MyAdRequests';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
@@ -131,6 +131,10 @@ export default function CoAdminDashboard() {
                             <TabsTrigger value="team" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
                                 <Shield className="h-4 w-4 mr-2" />
                                 College Team
+                            </TabsTrigger>
+                            <TabsTrigger value="ads" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                                <Megaphone className="h-4 w-4 mr-2" />
+                                Ad Requests
                             </TabsTrigger>
                         </TabsList>
 
@@ -270,6 +274,25 @@ export default function CoAdminDashboard() {
                             <Card><CardHeader><CardTitle>College Team Management</CardTitle></CardHeader>
                                 <CardContent><CollegeDetailView collegeName={user?.college || ''} /></CardContent>
                             </Card>
+                        </TabsContent>
+
+                        <TabsContent value="ads">
+                            <Card className="border-border/50 shadow-xl overflow-hidden">
+                                <CardHeader className="bg-slate-50/50 border-b">
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Megaphone className="h-5 w-5 text-primary" />
+                                        Request Advertisement
+                                    </CardTitle>
+                                    <p className="text-sm text-muted-foreground">Submit a campaign for platform-wide or targeted display. All requests require Owner approval.</p>
+                                </CardHeader>
+                                <CardContent className="p-6">
+                                    <AdRequestForm />
+                                </CardContent>
+                            </Card>
+
+                            <div className="mt-6">
+                                <MyAdRequests />
+                            </div>
                         </TabsContent>
                     </Tabs>
                 </div>

@@ -3,7 +3,9 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
 
-dotenv.config();
+const path = require('path');
+// .env config
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 connectDB();
 
@@ -28,6 +30,8 @@ app.use('/api/notes', require('./routes/notes'));
 app.use('/api/locations', require('./routes/locations'));
 app.use('/api/team-chat', require('./routes/teamChat'));
 app.use('/api/faqs', require('./routes/faqs'));
+app.use('/api/ads', require('./routes/ads'));
+app.use('/api/config', require('./routes/config'));
 
 // Weekly Leaderboard Reset & Student Rewards (Monday 00:00)
 const cron = require('node-cron');

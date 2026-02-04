@@ -50,8 +50,6 @@ const roleLabels: Record<UserRole, string> = {
   club_coordinator: 'Club Coordinator',
   admin: 'College Admin',
   owner: 'Owner',
-  co_admin: 'Co-Admin',
-  club_co_coordinator: 'Club Co-Coordinator',
   club_head: 'Club Head',
 };
 
@@ -131,15 +129,15 @@ export default function Profile() {
   });
 
   const updateProfileMutation = useMutation({
-    mutationFn: (data: any) => {
+    mutationFn: (data: Partial<User>) => {
       // Handle skills string to array conversion
       const processedData = {
         ...data,
-        skills: data.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '')
+        skills: typeof data.skills === 'string' ? data.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '') : data.skills
       };
       return api.updateUser(user!.id, processedData);
     },
-    onSuccess: (updatedUser) => {
+    onSuccess: (updatedUser: User) => {
       updateUser(updatedUser);
       queryClient.setQueryData(['user'], updatedUser);
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -214,6 +212,15 @@ export default function Profile() {
     enabled: !!profileData?.college
   });
 
+  useEffect(() => {
+    if (freshUserData) {
+      const hasChanged = JSON.stringify(freshUserData) !== JSON.stringify(user);
+      if (hasChanged) {
+        updateUser(freshUserData);
+      }
+    }
+  }, [freshUserData, updateUser, user]);
+
   // Loading barrier - if no data yet, show centered loader
   if (!profileData && isLoadingProfile) {
     return (
@@ -225,15 +232,6 @@ export default function Profile() {
       </Layout>
     );
   }
-
-  useEffect(() => {
-    if (freshUserData) {
-      const hasChanged = JSON.stringify(freshUserData) !== JSON.stringify(user);
-      if (hasChanged) {
-        updateUser(freshUserData);
-      }
-    }
-  }, [freshUserData, updateUser, user]);
 
   // Ensure joinedClubs is an array before filtering
   const safeJoinedClubs = Array.isArray(profileData?.joinedClubs) ? profileData.joinedClubs : [];

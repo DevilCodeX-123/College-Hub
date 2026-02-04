@@ -17,7 +17,6 @@ import {
     UserPlus,
     Target,
     FolderKanban,
-    Trophy,
     FileText,
     Plus,
     BookOpen,
@@ -27,24 +26,18 @@ import {
     Navigation,
     Loader2,
     ClipboardList,
-    Crown,
-    Mail,
-    Edit,
-    Flag,
-    UserCog,
     Clock,
-    Megaphone
+    Megaphone,
+    Square
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { CreateClubDialog } from '@/components/owner/CreateClubDialog';
 import { CreatePollDialog } from '@/components/owner/CreatePollDialog';
 import { CreateBroadcastDialog } from '@/components/owner/CreateBroadcastDialog';
 import { CreateChallengeDialog } from '@/components/owner/CreateChallengeDialog';
-import { AssignHeadDialog } from '@/components/owner/AssignHeadDialog';
 import { UserDetailsDialog } from '@/components/owner/UserDetailsDialog';
 import { CreateNoteDialog } from '@/components/owner/CreateNoteDialog';
 import { CreateLocationDialog } from '@/components/owner/CreateLocationDialog';
@@ -57,6 +50,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { CollegeFeedbackManagement } from '@/components/owner/CollegeFeedbackManagement';
 import { MessageCircle } from 'lucide-react';
+import { AdRequestForm } from '@/components/common/AdRequestForm';
+import { MyAdRequests } from '@/components/common/MyAdRequests';
 
 interface CollegeAdminViewProps {
     collegeName: string;
@@ -66,8 +61,6 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('overview');
     const [searchQuery, setSearchQuery] = useState('');
-    const navigate = useNavigate();
-    const { toast } = useToast();
 
     const [isCreateClubOpen, setIsCreateClubOpen] = useState(false);
     const [isCreatePollOpen, setIsCreatePollOpen] = useState(false);
@@ -174,9 +167,13 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                         <Settings className="h-4 w-4 mr-2" />
                         Notifications
                     </TabsTrigger>
-                    <TabsTrigger value="feedback" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    <TabsTrigger value="feedback" className="data-[state=active]:bg-background">
                         <MessageCircle className="h-4 w-4 mr-2" />
                         Feedback
+                    </TabsTrigger>
+                    <TabsTrigger value="ads" className="data-[state=active]:bg-background">
+                        <Megaphone className="h-4 w-4 mr-2" />
+                        Ads
                     </TabsTrigger>
                     <TabsTrigger value="notes" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
                         <BookOpen className="h-4 w-4 mr-2" />
@@ -411,6 +408,23 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
                     <CollegeFeedbackManagement collegeName={collegeName} />
                 </TabsContent>
 
+                <TabsContent value="ads" className="space-y-6">
+                    <Card className="border-border/50 shadow-xl overflow-hidden">
+                        <CardHeader className="bg-slate-50/50 border-b">
+                            <CardTitle className="flex items-center gap-2">
+                                <Megaphone className="h-5 w-5 text-primary" />
+                                Request Advertisement
+                            </CardTitle>
+                            <p className="text-sm text-muted-foreground">Submit a campaign for platform-wide or targeted display. All requests require Owner approval.</p>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                            <AdRequestForm />
+                        </CardContent>
+                    </Card>
+
+                    <MyAdRequests />
+                </TabsContent>
+
                 <TabsContent value="polls" className="space-y-6">
                     <div className="grid md:grid-cols-1 gap-6">
                         <Card>
@@ -522,7 +536,6 @@ export function CollegeAdminView({ collegeName }: CollegeAdminViewProps) {
             <CreateBroadcastDialog
                 open={isCreateBroadcastOpen}
                 onClose={() => setIsCreateBroadcastOpen(false)}
-                collegeName={collegeName}
             />
 
             <CreateChallengeDialog
@@ -768,19 +781,6 @@ function CollegePollsList({ college, status }: { college: string, status: string
 
     if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
-    const getTimeRemaining = (expiresAt: string) => {
-        if (!expiresAt) return null;
-        const now = new Date().getTime();
-        const expiry = new Date(expiresAt).getTime();
-        const diff = expiry - now;
-
-        if (diff <= 0) return "Expired";
-
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        return `${hours}h ${minutes}m remaining`;
-    };
-
     return (
         <div className="space-y-4">
             {polls.length === 0 ? (
@@ -792,54 +792,57 @@ function CollegePollsList({ college, status }: { college: string, status: string
                 polls.map((p: any) => {
                     const resultsHidden = p.options[0]?.votes === undefined;
                     const totalVotes = resultsHidden ? 0 : p.options.reduce((acc: number, curr: any) => acc + curr.votes, 0);
-                    const timeRemaining = p.expiresAt ? getTimeRemaining(p.expiresAt) : null;
-                    const isCreator = user?.id === p.createdBy;
+                    const canManagePoll = user?.id === p.createdBy || user?.role === 'owner' || user?.role === 'co_admin' || user?.role === 'club_coordinator';
 
                     return (
                         <Card key={p._id} className="p-4">
                             <div className="flex justify-between items-start mb-3">
                                 <div>
                                     <p className="font-bold">{p.question}</p>
-                                    {p.expiresAt && <PollCountdown expiresAt={p.expiresAt} />}
+                                    {p.expiresAt && p.status === 'active' ? (
+                                        <PollCountdown expiresAt={p.expiresAt} />
+                                    ) : (
+                                        p.status === 'active' && <span className="text-[10px] text-amber-500 font-bold flex items-center gap-1"><Clock className="h-3 w-3" /> No Timer Set</span>
+                                    )}
                                 </div>
                                 <div className="flex gap-2">
                                     <Badge variant={(p.status === 'active') ? 'default' : 'secondary'} className="font-bold">
                                         {(p.expiresAt && new Date() >= new Date(p.expiresAt)) ? 'EXPIRED' : p.status.toUpperCase()}
                                     </Badge>
-                                    {p.status === 'active' && isCreator && (
+                                    {canManagePoll && p.status === 'active' && (
                                         <>
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="h-6 text-xs px-2"
+                                                className="h-7 text-xs px-2 gap-1 border-primary text-primary hover:bg-primary/5"
                                                 onClick={() => {
                                                     setExtendPollId(p._id);
                                                     setCurrentExpiry(p.expiresAt);
                                                 }}
                                             >
-                                                Extend
+                                                <Clock className="h-3 w-3" /> {p.expiresAt ? 'Extend' : 'Set Timer'}
                                             </Button>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-6 text-xs text-destructive hover:text-destructive px-2"
-                                                onClick={() => closePollMutation.mutate(p._id)}
+                                                className="h-7 text-xs text-destructive hover:bg-destructive/5 px-2 gap-1"
+                                                onClick={() => { if (confirm("Close this poll?")) closePollMutation.mutate(p._id); }}
                                             >
-                                                Close
+                                                <Square className="h-3 w-3 fill-current" /> Close
                                             </Button>
                                         </>
                                     )}
-                                    {p.status === 'closed' && isCreator && (
+                                    {canManagePoll && p.status === 'closed' && (
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="h-6 text-xs px-2 border-primary text-primary hover:bg-primary/10"
+                                            className="h-7 text-xs px-2 gap-1 border-primary text-primary hover:bg-primary/5 font-bold"
                                             onClick={() => {
                                                 setExtendPollId(p._id);
                                                 setCurrentExpiry(p.expiresAt);
                                             }}
                                         >
-                                            Restart
+                                            <Plus className="h-3 w-3" /> Restart
                                         </Button>
                                     )}
                                 </div>
@@ -888,14 +891,8 @@ function NotificationsHistory({ collegeName }: { collegeName: string }) {
     const { data: notifications = [], isLoading } = useQuery({
         queryKey: ['broadcast-notifications', user?.id, collegeName],
         queryFn: async () => {
-            const allNotifs = await api.getNotifications(user?.id || '', user?.role || 'student');
-            // Filter to ONLY show manual broadcasts sent from this panel
-            // Categorical recipients indicate a manual broadcast, or explicitly tagged
-            const categoricalRecipients = ['all', 'students', 'coordinators', 'admins', 'members'];
-            return allNotifs.filter((n: any) =>
-                n.isManualBroadcast === true ||
-                categoricalRecipients.includes(n.recipient)
-            );
+            // explicitly request manual broadcasts only
+            return await api.getNotifications(user?.id || '', user?.role || 'student', undefined, true);
         }
     });
 
@@ -952,11 +949,34 @@ function NotificationsHistory({ collegeName }: { collegeName: string }) {
                     </CardHeader>
                     <CardContent className="pt-4 pb-4">
                         <div className="bg-background/90 p-5 rounded-2xl border border-border shadow-inner group-hover:bg-background transition-all">
-                            <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap text-foreground font-medium">{notif.message}</p>
+                            <ExpandableText text={notif.message} />
                         </div>
                     </CardContent>
                 </Card>
             ))}
+        </div>
+    );
+}
+
+function ExpandableText({ text }: { text: string }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const limit = 200;
+
+    if (!text || text.length <= limit) {
+        return <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap text-foreground font-medium">{text}</p>;
+    }
+
+    return (
+        <div>
+            <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap text-foreground font-medium">
+                {isExpanded ? text : `${text.substring(0, limit)}...`}
+            </p>
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-xs font-bold text-primary mt-2 hover:underline focus:outline-none"
+            >
+                {isExpanded ? 'READ LESS' : 'READ MORE'}
+            </button>
         </div>
     );
 }

@@ -20,12 +20,16 @@ const notificationSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['info', 'alert', 'success', 'warning', 'system'],
+        enum: ['info', 'alert', 'success', 'warning', 'system', 'club_broadcast'],
         default: 'info'
     },
     category: {
         type: String,
         default: 'general'
+    },
+    isManualBroadcast: {
+        type: Boolean,
+        default: false
     },
     readBy: [{
         type: mongoose.Schema.Types.ObjectId,

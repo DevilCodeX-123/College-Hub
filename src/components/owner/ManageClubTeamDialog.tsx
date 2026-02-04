@@ -37,6 +37,21 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers, defaul
     const [customTitle, setCustomTitle] = useState('');
     const [activeTab, setActiveTab] = useState(defaultTab);
 
+    const getRoleLabel = (r: string) => {
+        const labels: Record<string, string> = {
+            'club_coordinator': 'Coordinator',
+            'club_co_coordinator': 'Joint Coordinator',
+            'club_head': 'Secretary',
+            'head': 'Secretary',
+            'core_member': 'Core Team',
+            'student': 'Student',
+            'admin': 'Admin',
+            'co_admin': 'Co-Admin',
+            'owner': 'Owner'
+        };
+        return labels[r] || r.replace(/_/g, ' ').toUpperCase();
+    };
+
     const clubId = club?._id || club?.id;
 
     // Filter to show all potentially eligible users (Members of the club)
@@ -354,7 +369,7 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers, defaul
                                                         <p className="font-black text-amber-900 text-sm uppercase tracking-tight">{m.name}</p>
                                                         <div className="flex items-center gap-1.5">
                                                             <Badge className={`${m.customTitle === 'Faculty Coordinator' ? 'bg-indigo-600' : 'bg-amber-600'} text-[8px] h-4 py-0 font-bold tracking-tighter shrink-0 text-white`}>
-                                                                {m.customTitle === 'Faculty Coordinator' ? 'FACULTY' : 'COORDINATOR'}
+                                                                {m.customTitle === 'Faculty Coordinator' ? 'FACULTY' : getRoleLabel(m.role).toUpperCase()}
                                                             </Badge>
                                                             {m.customTitle && m.customTitle !== 'Faculty Coordinator' && <span className="text-[10px] text-amber-600/60 font-medium italic truncate max-w-[100px]">"{m.customTitle}"</span>}
                                                         </div>
@@ -392,7 +407,7 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers, defaul
                                                     <div>
                                                         <p className="font-black text-blue-900 text-sm uppercase tracking-tight">{m.name}</p>
                                                         <div className="flex items-center gap-1.5">
-                                                            <Badge className="bg-blue-600 text-[8px] h-4 py-0 font-bold tracking-tighter shrink-0">{m.role}</Badge>
+                                                            <Badge className="bg-blue-600 text-[8px] h-4 py-0 font-bold tracking-tighter shrink-0 text-white">{getRoleLabel(m.role).toUpperCase()}</Badge>
                                                             {m.customTitle && <span className="text-[10px] text-blue-600/60 font-medium italic truncate max-w-[100px]">"{m.customTitle}"</span>}
                                                         </div>
                                                     </div>
@@ -427,7 +442,7 @@ export function ManageClubTeamDialog({ open, onClose, club, collegeUsers, defaul
                                                     <div>
                                                         <p className="font-bold text-slate-800 text-sm">{m.name}</p>
                                                         <div className="flex items-center gap-1.5">
-                                                            <Badge variant="outline" className="text-[8px] h-4 py-0 font-black opacity-60 tracking-widest uppercase shrink-0">{m.role}</Badge>
+                                                            <Badge variant="outline" className="text-[8px] h-4 py-0 font-black opacity-60 tracking-widest uppercase shrink-0">{getRoleLabel(m.role)}</Badge>
                                                             {m.customTitle && <span className="text-[10px] text-muted-foreground italic truncate max-w-[100px]">"{m.customTitle}"</span>}
                                                         </div>
                                                     </div>

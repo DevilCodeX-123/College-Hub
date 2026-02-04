@@ -14,19 +14,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Label } from '@/components/ui/label';
 import {
-    User,
-    Mail,
+    Shield,
     Calendar,
     Building2,
+    CheckCircle2,
+    Loader2,
+    Activity,
     Users,
     Target,
     FolderKanban,
-    Shield,
     Bell,
-    Ban,
-    CheckCircle2,
-    Loader2,
-    Activity
+    Ban
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -243,9 +241,7 @@ export function UserDetailsDialog({ user, open, onClose }: UserDetailsDialogProp
                                                         { value: 'student', label: 'Student', power: 1 },
                                                         { value: 'core_member', label: 'Core Team', power: 4 },
                                                         { value: 'club_head', label: 'Secretary', power: 6 },
-                                                        { value: 'club_co_coordinator', label: 'Joint Coordinator', power: 7 },
                                                         { value: 'club_coordinator', label: 'Coordinator', power: 8 },
-                                                        { value: 'co_admin', label: 'Co-Admin', power: 9 },
                                                         { value: 'admin', label: 'Admin', power: 10 }
                                                     ]
                                                         .filter(opt => currentUser?.role === 'owner' || opt.power < myPower)

@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema({
     avatar: String,
     role: {
         type: String,
-        enum: ['owner', 'student', 'club_member', 'club_coordinator', 'club_co_coordinator', 'club_head', 'core_member', 'admin', 'co_admin'],
+        enum: ['owner', 'student', 'club_member', 'club_coordinator', 'club_head', 'core_member', 'admin'],
         default: 'student'
     },
     customTitle: { type: String }, // For custom titles like "Dean", "Principal", etc.

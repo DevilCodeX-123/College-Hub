@@ -61,6 +61,12 @@ export interface Club {
     linkedin?: string;
     website?: string;
   };
+  tagline?: string;
+  vision?: string;
+  mission?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  gallery?: string[];
   coreTeam: CoreMember[];
   pendingMembers?: { userId: string; name: string; email: string; }[];
   joiningDeadline?: Date | string;
@@ -93,10 +99,16 @@ export interface CoreMember {
 
 export interface Achievement {
   id: string;
+  _id?: string;
   title: string;
   description: string;
   icon: string;
-  earnedAt: Date;
+  earnedAt: Date | string;
+  location?: string;
+  rank?: string;
+  driveLink?: string;
+  chiefGuests?: { name: string; designation: string }[];
+  winners?: { name: string; position: string; prize: string }[];
 }
 
 export interface ChallengePhase {
@@ -154,12 +166,12 @@ export interface Project {
   memberLimit: number;
   problemStatement: string;
   idea: string;
-  requestedBy: string;
+  requestedBy: string | User;
   joinCode?: string;
   clubId: string;
   clubName: string;
   progress: number;
-  team: string[];
+  team: (string | User)[];
   deadline: Date;
   status: 'pending' | 'in_progress' | 'completed' | 'on_hold' | 'rejected';
   joinRequests?: {
@@ -303,3 +315,33 @@ export interface TeamChatMessage {
   timestamp: Date | string;
 }
 
+
+export interface Ad {
+  id: string;
+  _id?: string;
+  title: string;
+  description: string;
+  type: 'image' | 'video';
+  url: string;
+  clickUrl?: string;
+  duration?: number;
+  skipDelay?: number;
+  frequencyPerUser?: number;
+  frequencyInterval?: number;
+  maxTotalViews?: number;
+  targetingType: 'worldwide' | 'college' | 'club' | 'page';
+  targetColleges?: string[];
+  targetClubs?: string[];
+  targetPages?: string[];
+  status: 'pending' | 'approved' | 'rejected' | 'active' | 'completed';
+  isActive: boolean;
+  paymentStatus?: 'pending' | 'completed' | 'failed';
+  totalViewsCount: number;
+  uniqueViewsCount: number;
+  clicksCount: number;
+  dailyViews?: { date: string; count: number }[];
+  requestingUserId?: string;
+  createdAt?: string;
+  rejectionReason?: string;
+  requestedBy?: User | string;
+}

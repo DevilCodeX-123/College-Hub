@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, UserRole } from '@/types';
 import { api } from '@/lib/api';
 
@@ -21,8 +21,8 @@ const roleHierarchy: Record<UserRole, number> = {
   club_head: 4,
   club_co_coordinator: 5,
   club_coordinator: 6,
-  co_admin: 7,
-  admin: 8,
+  admin: 7,
+  co_admin: 8,
   owner: 9,
 };
 

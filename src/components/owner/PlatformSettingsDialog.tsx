@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+
+import { useState, useEffect } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -16,16 +17,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
     Settings,
     Globe,
-    Lock,
-    Bell,
-    Save,
-    Zap,
     Megaphone,
     Send,
+    Zap,
     Loader2
-} from "lucide-react";
+} from 'lucide-react';
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -44,8 +42,29 @@ export function PlatformSettingsDialog({ open, onClose }: PlatformSettingsDialog
         appName: "Campus link",
         maintenanceMode: false,
         registrationEnabled: true,
-        premiumFeatures: true
+        premiumFeatures: true,
+        adPaymentEnabled: false,
+        minSelfCollegePrice: 0,
+        specificCollegePrice: 0,
+        worldwidePrice: 0,
+        qrCodeUrl: '',
+        paymentWarning: ''
     });
+
+    const { data: config } = useQuery({
+        queryKey: ['platform-config'],
+        queryFn: () => api.getConfig(),
+        enabled: open
+    });
+
+    useEffect(() => {
+        if (config) {
+            setSettings({
+                ...settings,
+                ...config
+            });
+        }
+    }, [config]);
 
     // Broadcast State
     const [broadcast, setBroadcast] = useState({
@@ -97,13 +116,23 @@ export function PlatformSettingsDialog({ open, onClose }: PlatformSettingsDialog
         });
     };
 
-    const handleSaveConfig = async () => {
+    const handleSaveConfig = () => {
+        if (!user) return;
         setLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 800));
-        localStorage.setItem('platform_settings', JSON.stringify(settings));
-        setLoading(false);
-        toast.success("Platform Configuration Saved");
-        onClose();
+        api.updateConfig({ ...settings, requestingUserId: user.id })
+            .then(() => {
+                queryClient.invalidateQueries({ queryKey: ['platform-config'] });
+                toast.success("Platform Configuration Saved");
+                onClose();
+            })
+            .catch((err: any) => {
+                toast.error("Failed to save configuration", {
+                    description: err.response?.data?.message || err.message
+                });
+            })
+            .finally(() => {
+                setLoading(true);
+            });
     };
 
     return (
@@ -229,11 +258,8 @@ export function PlatformSettingsDialog({ open, onClose }: PlatformSettingsDialog
                                 </p>
                             </div>
                         </div>
-                        <Switch
-                            checked={settings.premiumFeatures}
-                            onCheckedChange={(checked) => setSettings({ ...settings, premiumFeatures: checked })}
-                        />
                     </div>
+
                 </div>
 
                 <DialogFooter className="pt-4 border-t">
@@ -246,6 +272,6 @@ export function PlatformSettingsDialog({ open, onClose }: PlatformSettingsDialog
                     </Button>
                 </DialogFooter>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 }

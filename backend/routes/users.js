@@ -24,8 +24,62 @@ router.get('/', async (req, res) => {
             query.college = college;
         }
 
-        const users = await User.find(query);
-        res.json(users);
+        const users = await User.find(query).populate('joinedClubs', 'name coreTeam coordinatorId');
+
+        // Enrich users with their specific roles in each club
+        const enrichedUsers = users.map(user => {
+            const userObj = user.toObject();
+            userObj.clubRoles = [];
+
+            if (userObj.joinedClubs && userObj.joinedClubs.length > 0) {
+                userObj.joinedClubs.forEach(club => {
+                    const clubRole = {
+                        clubId: club._id,
+                        clubName: club.name,
+                        role: 'club_member' // default
+                    };
+
+                    // Check if user is coordinator
+                    if (club.coordinatorId === userObj._id.toString()) {
+                        clubRole.role = 'club_coordinator';
+                    } else if (club.coreTeam) {
+                        // Check core team for specific role
+                        const teamMember = club.coreTeam.find(m => m.userId === userObj._id.toString());
+                        if (teamMember) {
+                            clubRole.role = teamMember.role;
+                            clubRole.customTitle = teamMember.customTitle;
+                        }
+                    }
+
+                    userObj.clubRoles.push(clubRole);
+                });
+            }
+
+            return userObj;
+        });
+
+        res.json(enrichedUsers);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Get total user count
+// Get total and college-specific user count
+router.get('/count', async (req, res) => {
+    try {
+        const { requestingUserId } = req.query;
+        const total = await User.countDocuments();
+        let college = 0;
+
+        if (requestingUserId) {
+            const requester = await User.findById(requestingUserId);
+            if (requester && requester.college) {
+                college = await User.countDocuments({ college: requester.college });
+            }
+        }
+
+        res.json({ total, college });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -188,6 +242,30 @@ router.post('/:id/award-badge', async (req, res) => {
         user.badges.push({ name, icon, description, earnedAt: earnedAt || new Date() });
         await user.save();
         res.json(user);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Award Badge Batch
+router.post('/award-badge/batch', async (req, res) => {
+    try {
+        const { userIds, badge } = req.body; // badge: { name, icon, description, earnedAt }
+        if (!userIds || !Array.isArray(userIds)) {
+            return res.status(400).json({ message: 'userIds array is required' });
+        }
+
+        const badgeData = {
+            ...badge,
+            earnedAt: badge.earnedAt || new Date()
+        };
+
+        await User.updateMany(
+            { _id: { $in: userIds } },
+            { $push: { badges: badgeData } }
+        );
+
+        res.json({ success: true, message: `Badge awarded to ${userIds.length} users` });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

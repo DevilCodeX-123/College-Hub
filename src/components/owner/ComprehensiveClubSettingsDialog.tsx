@@ -21,8 +21,6 @@ import {
     History,
     Users,
     Plus,
-    ClipboardList,
-    Zap,
     Crown,
     Shield,
     Save,
@@ -30,14 +28,6 @@ import {
     Clock,
     UserCheck,
     UserX,
-    CheckCircle2,
-    XCircle,
-    MapPin,
-    Link as LinkIcon,
-    Award,
-    Check,
-    ChevronsUpDown,
-    X,
     AlertTriangle,
     UserPlus
 } from 'lucide-react';
@@ -51,19 +41,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList
-} from "@/components/ui/command";
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover";
 import { ManageClubTasks } from '../dashboard/ManageClubTasks';
 import { ClubEventsManager } from '../club/ClubEventsManager';
 
@@ -87,7 +64,6 @@ export function ComprehensiveClubSettingsDialog({
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [activeTab, setActiveTab] = useState('basic');
-    const [isTasksTabActive, setIsTasksTabActive] = useState(false);
     const [isConfirmCoordinatorOpen, setIsConfirmCoordinatorOpen] = useState(false);
 
     // Basic Info State
@@ -110,8 +86,6 @@ export function ComprehensiveClubSettingsDialog({
     const [achievements, setAchievements] = useState(club?.achievements || []);
     const [newAchievement, setNewAchievement] = useState({ title: '', description: '', earnedAt: '' });
 
-    // History State
-    const [history, setHistory] = useState(club?.history || []);
 
     // Team Members State
     const [coreTeam, setCoreTeam] = useState(club?.coreTeam || []);
@@ -134,7 +108,6 @@ export function ComprehensiveClubSettingsDialog({
             });
             setSelectedCoordinator(club.coordinatorId || '');
             setAchievements(club.achievements || []);
-            setHistory(club.history || []);
             setCoreTeam(club.coreTeam || []);
             setPendingMembers(club.pendingMembers || []);
         }
@@ -191,7 +164,6 @@ export function ComprehensiveClubSettingsDialog({
             if (data) {
                 // Update local states based on updated club data
                 setAchievements(data.achievements || []);
-                setHistory(data.history || []);
                 setCoreTeam(data.coreTeam || []);
                 setPendingMembers(data.pendingMembers || []);
                 setBasicInfo({
@@ -337,7 +309,6 @@ export function ComprehensiveClubSettingsDialog({
 
                             <Tabs value={activeTab} onValueChange={(v) => {
                                 setActiveTab(v);
-                                setIsTasksTabActive(v === 'tasks');
                             }} className="w-full">
                                 <TabsList className="flex flex-wrap h-auto gap-0.5 bg-secondary/30 p-1 mb-4 lg:grid lg:grid-cols-6 lg:gap-0 lg:h-10">
                                     <TabsTrigger value="basic" className="flex-1 min-w-[70px] sm:min-w-[100px] text-[9px] sm:text-xs h-8 sm:h-9">Basic Info</TabsTrigger>
@@ -709,7 +680,6 @@ export function ComprehensiveClubSettingsDialog({
                                                                     </SelectTrigger>
                                                                     <SelectContent className="rounded-xl border-2">
                                                                         <SelectItem value="club_head" className="rounded-lg text-blue-600 font-bold">Secretary & Head Panel</SelectItem>
-                                                                        <SelectItem value="club_co_coordinator" className="rounded-lg text-blue-600 font-bold">Co-Coordinator</SelectItem>
                                                                         <SelectItem value="core_member" className="rounded-lg">Club Core Team</SelectItem>
                                                                     </SelectContent>
                                                                 </Select>
@@ -746,16 +716,16 @@ export function ComprehensiveClubSettingsDialog({
                                                     Secretary & Head Panel
                                                 </h4>
                                                 <Badge variant="outline" className="text-[9px] font-bold text-blue-600 border-blue-200">
-                                                    {coreTeam.filter((m: any) => m.role === 'club_head' || m.role === 'club_co_coordinator').length} Active
+                                                    {coreTeam.filter((m: any) => m.role === 'club_head').length} Active
                                                 </Badge>
                                             </div>
                                             <div className="grid gap-3">
-                                                {coreTeam.filter((m: any) => m.role === 'club_head' || m.role === 'club_co_coordinator').length === 0 ? (
+                                                {coreTeam.filter((m: any) => m.role === 'club_head').length === 0 ? (
                                                     <div className="py-10 text-center border-2 border-dashed border-blue-100 bg-blue-50/50 rounded-2xl text-[11px] text-blue-400 font-medium italic">
                                                         No Secretary or Head assigned to this club yet.
                                                     </div>
                                                 ) : (
-                                                    coreTeam.filter((m: any) => m.role === 'club_head' || m.role === 'club_co_coordinator').map((member: any) => (
+                                                    coreTeam.filter((m: any) => m.role === 'club_head').map((member: any) => (
                                                         <Card key={member.userId} className="border-l-4 border-l-blue-600 shadow-sm hover:shadow-md transition-all overflow-hidden rounded-xl">
                                                             <CardContent className="p-4 sm:p-5">
                                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

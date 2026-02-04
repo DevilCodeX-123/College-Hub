@@ -59,8 +59,9 @@ export default function Register() {
             // Auto login after register
             await login(formData.email, formData.password);
             navigate('/');
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Failed to register');
+        } catch (err: unknown) {
+            const error = err as any;
+            setError(error.response?.data?.message || 'Failed to register');
         } finally {
             setLoading(false);
         }

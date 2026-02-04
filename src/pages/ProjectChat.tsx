@@ -1,18 +1,32 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Send, ArrowLeft, Loader2, Users, Shield, Zap, Target } from 'lucide-react';
+import { Send, ArrowLeft, Loader2, Users } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { Project, User } from '@/types';
+
+interface Message {
+    id?: string;
+    _id?: string;
+    content: string;
+    sender: { _id?: string; id?: string; name: string };
+    createdAt: string;
+    type: string;
+    requestStatus?: 'pending' | 'accepted' | 'rejected';
+    joinRequestId?: string;
+    goalId?: string;
+    requestedDate?: string;
+}
 
 export default function ProjectChat() {
     const { toast } = useToast();
@@ -23,13 +37,13 @@ export default function ProjectChat() {
     const [newMessage, setNewMessage] = useState('');
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const { data: project } = useQuery({
+    const { data: project } = useQuery<Project>({
         queryKey: ['project', id, user?.id],
         queryFn: () => api.getProject(id!, user?.id || (user as any)?._id),
         enabled: !!id && !!user,
     });
 
-    const { data: messages = [], isLoading } = useQuery({
+    const { data: messages = [], isLoading } = useQuery<Message[]>({
         queryKey: ['project-messages', id],
         queryFn: () => api.getProjectMessages(id!),
         refetchInterval: 3000, // Poll every 3 seconds
@@ -45,7 +59,6 @@ export default function ProjectChat() {
     });
 
     const resolveJoinMutation = useMutation({
-        //@ts-ignore
         mutationFn: ({ requestId, status, rejectionReason, messageId }: { requestId: string, status: 'accepted' | 'rejected', rejectionReason?: string, messageId?: string }) =>
             api.resolveProjectJoinRequest(id!, requestId, { status, requestingUserId: uId || '', rejectionReason, messageId }),
         onSuccess: () => {
@@ -93,16 +106,16 @@ export default function ProjectChat() {
 
     const isMember = (() => {
         if (!project || !user) return false;
-        const uId = (user?.id || (user as any)?._id)?.toString();
+        const uId = (user.id || (user as any)._id)?.toString();
         if (!uId) return false;
 
-        const isTeamMember = (project as any).team?.some((m: any) => {
+        const isTeamMember = project.team?.some((m: string | User) => {
             if (!m) return false;
             const mId = (typeof m === 'string' ? m : (m.id || m._id))?.toString();
             return mId === uId;
         });
 
-        const leader = (project as any).requestedBy;
+        const leader = project.requestedBy;
         const leaderId = (typeof leader === 'string' ? leader : (leader?.id || leader?._id))?.toString();
 
         return isTeamMember || user.role === 'admin' || leaderId === uId;
@@ -110,7 +123,7 @@ export default function ProjectChat() {
 
     const isLeader = (() => {
         if (!project || !user) return false;
-        const leader = (project as any).requestedBy;
+        const leader = project.requestedBy;
         const leaderId = (typeof leader === 'string' ? leader : (leader?.id || leader?._id))?.toString();
         // const isAdmin = user.role === 'admin' || user.role === 'owner';
         return leaderId === uId; // Strictly leader only
@@ -163,7 +176,7 @@ export default function ProjectChat() {
                                         <p className="text-muted-foreground italic">No messages yet. Start the conversation!</p>
                                     </div>
                                 )}
-                                {messages.map((msg: any) => {
+                                {messages.map((msg: Message) => {
                                     const isSystem = msg.type === 'system';
                                     const isRecruitment = msg.type === 'recruitment' || msg.content?.includes('approve or reject this recruit directly') || msg.content?.includes('NEW RECRUIT ALERT');
                                     const isPostpone = msg.type === 'postpone' || msg.content?.includes('MISSION POSTPONE REQUEST');
@@ -192,9 +205,9 @@ export default function ProjectChat() {
                                                                     onClick={() => {
                                                                         const msgId = msg.id || msg._id;
                                                                         if (isPostpone) {
-                                                                            resolvePostponeMutation.mutate({ goalId: msg.goalId, status: 'accepted', deadline: msg.requestedDate, messageId: msgId });
+                                                                            resolvePostponeMutation.mutate({ goalId: msg.goalId!, status: 'accepted', deadline: msg.requestedDate, messageId: msgId });
                                                                         } else {
-                                                                            resolveJoinMutation.mutate({ requestId: msg.joinRequestId, status: 'accepted', messageId: msgId });
+                                                                            resolveJoinMutation.mutate({ requestId: msg.joinRequestId!, status: 'accepted', messageId: msgId });
                                                                         }
                                                                     }}
                                                                 >
@@ -208,11 +221,11 @@ export default function ProjectChat() {
                                                                     onClick={() => {
                                                                         const msgId = msg.id || msg._id;
                                                                         if (isPostpone) {
-                                                                            resolvePostponeMutation.mutate({ goalId: msg.goalId, status: 'rejected', messageId: msgId });
+                                                                            resolvePostponeMutation.mutate({ goalId: msg.goalId!, status: 'rejected', messageId: msgId });
                                                                         } else {
                                                                             const reason = prompt("State reason for rejection (this will be sent to candidate):");
                                                                             if (reason !== null) {
-                                                                                resolveJoinMutation.mutate({ requestId: msg.joinRequestId, status: 'rejected', rejectionReason: reason, messageId: msgId });
+                                                                                resolveJoinMutation.mutate({ requestId: msg.joinRequestId!, status: 'rejected', rejectionReason: reason, messageId: msgId });
                                                                             }
                                                                         }
                                                                     }}

@@ -12,7 +12,44 @@ const User = require('../models/User');
 
 router.get('/', async (req, res) => {
     try {
-        const { userId, role } = req.query;
+        // Check for specific recipient filter (e.g., for Club History)
+        // Check for specific recipient filter (e.g., for Club History)
+        if (req.query.recipientId) {
+            console.log(`Fetching specific history for recipient: ${req.query.recipientId}, isManual: ${req.query.isManualBroadcast}`);
+
+            const query = { recipient: req.query.recipientId };
+
+            // Add optional type or isManualBroadcast filter
+            if (req.query.type) query.type = req.query.type;
+            if (req.query.isManualBroadcast === 'true') query.isManualBroadcast = true;
+
+            console.log('History Query:', JSON.stringify(query));
+
+            const history = await Notification.find(query)
+                .sort({ createdAt: -1 })
+                .limit(50); // Limit history for performance
+
+            console.log(`Found ${history.length} history items`);
+            return res.json(history);
+        }
+
+        const { userId, role, isManualBroadcast } = req.query;
+
+        // If requesting manual broadcasts specifically (e.g. for Admin View)
+        if (isManualBroadcast === 'true' && userId) {
+            const allNotifs = await Notification.find({
+                $or: [
+                    { recipient: userId }, // though unlikely for broadcast list, maybe helpful
+                    // We need to fetch broadcasts that *this user* would see, OR that are simply global
+                ]
+            });
+            // Actually, the previous logic was fetching *received* notifications. 
+            // The Owner View wants to see *sent* broadcasts history? 
+            // No, NotificationsHistory component fetches "getNotifications(user.id, user.role)". 
+            // It filters client side. 
+            // Let's standardise: 
+            // If isManualBroadcast is requested, apply it to the main query.
+        }
 
         if (!userId) return res.status(400).json({ message: 'User ID required' });
 
@@ -22,16 +59,26 @@ router.get('/', async (req, res) => {
         if (role === 'club_member' || role === 'core_member') roleGroups.push('students', 'members');
         if (role === 'club_coordinator' || role === 'club_co_coordinator' || role === 'club_head') roleGroups.push('coordinators', 'admins');
         if (role === 'admin' || role === 'co_admin') roleGroups.push('admins', 'students', 'coordinators');
+        if (role === 'admin' || role === 'co_admin') roleGroups.push('admins', 'students', 'coordinators');
         if (role === 'owner') roleGroups.push('owner', 'admins', 'students', 'coordinators');
 
-        console.log(`Fetching notifications for UserID: ${userId}, Role: ${role}, RoleGroups: ${roleGroups}`);
+        // Fetch user to get joined clubs and convert to strings for matching matches
+        const user = await User.findById(userId);
+        const joinedClubs = user?.joinedClubs?.map(id => id.toString()) || [];
+
+        console.log(`Fetching notifications for UserID: ${userId}, Role: ${role}, RoleGroups: ${roleGroups}, Clubs: ${joinedClubs.length}`);
 
         const query = {
             $or: [
                 { recipient: userId },         // Direct message
-                { recipient: { $in: roleGroups } } // Role-based or Global
+                { recipient: { $in: roleGroups } }, // Role-based or Global
+                { recipient: { $in: joinedClubs } } // Club-specific broadcasts
             ]
         };
+
+        if (req.query.isManualBroadcast === 'true') {
+            query.isManualBroadcast = true;
+        }
 
         const notifications = await Notification.find(query).sort({ createdAt: -1 });
         res.json(notifications);
@@ -44,7 +91,7 @@ router.get('/', async (req, res) => {
 // POST send notification
 router.post('/', async (req, res) => {
     try {
-        const { recipient, title, message, senderId, type, category } = req.body;
+        const { recipient, title, message, senderId, type, category, isManualBroadcast } = req.body;
         console.log('Notification Request Body:', req.body);
         console.log('SenderID Type:', typeof senderId, 'Value:', senderId);
 
@@ -62,7 +109,8 @@ router.post('/', async (req, res) => {
             title,
             message,
             type,
-            category: category || 'general'
+            category: category || 'general',
+            isManualBroadcast: isManualBroadcast === true || isManualBroadcast === 'true'
         });
 
         console.log('Attempting to save notification:', { recipient: finalRecipient, title, senderId });
@@ -108,10 +156,14 @@ router.put('/mark-all-read', async (req, res) => {
         if (role === 'admin' || role === 'co_admin') roleGroups.push('admins', 'students', 'coordinators');
         if (role === 'owner') roleGroups.push('owner', 'admins', 'students', 'coordinators');
 
+        const user = await User.findById(userId);
+        const joinedClubs = user?.joinedClubs || [];
+
         const query = {
             $or: [
                 { recipient: userId },
-                { recipient: { $in: roleGroups } }
+                { recipient: { $in: roleGroups } },
+                { recipient: { $in: joinedClubs } }
             ],
             readBy: { $ne: userId } // Only unread ones
         };

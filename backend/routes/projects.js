@@ -18,7 +18,11 @@ router.get('/', async (req, res) => {
             const requester = await User.findById(requestingUserId);
             if (requester) {
                 if (requester.role === 'owner') isAdminUser = true;
-                if (requester.role === 'admin' && requester.college === college) isAdminUser = true;
+                if (['admin', 'co_admin', 'club_coordinator', 'club_co_coordinator', 'club_head'].includes(requester.role)) {
+                    // For non-owners, they are "admins" for the purpose of viewing names IF they are in this college bubble
+                    // The query already filters by college, so if they are in the college, they can see names.
+                    isAdminUser = true;
+                }
 
                 if (requester.role !== 'owner' && typeof requester.college === 'string' && requester.college.trim()) {
                     // Force filter to requester's college bubble
@@ -45,8 +49,8 @@ router.get('/', async (req, res) => {
         // Return projects, sorting by newest first
         let projects = await Project.find(query)
             .sort({ createdAt: -1 })
-            .populate('team', 'name email')
-            .populate('requestedBy', 'name email')
+            .populate('team', 'name email avatar')
+            .populate('requestedBy', 'name email avatar')
             .populate('joinRequests.user', 'name email avatar')
             .lean();
 
@@ -90,8 +94,8 @@ router.get('/:id', async (req, res) => {
     try {
         const { requestingUserId } = req.query;
         const project = await Project.findById(req.params.id)
-            .populate('team', 'name email')
-            .populate('requestedBy', 'name email')
+            .populate('team', 'name email avatar')
+            .populate('requestedBy', 'name email avatar')
             .populate('joinRequests.user', 'name email avatar');
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
@@ -111,9 +115,14 @@ router.get('/:id', async (req, res) => {
         const isTeamMember = teamArray.some(m => m && m._id && m._id.toString() === requestingUserId) || (typeof project.requestedBy === 'string' && project.requestedBy === requestingUserId);
         // Check admin status - heavily simplified for this context, ideally fetch user
         const adminCheck = (requestingUserId && requestingUserId.match(/^[0-9a-fA-F]{24}$/)) ? await User.findById(requestingUserId) : null;
-        const isAdmin = adminCheck?.role === 'admin' || adminCheck?.role === 'owner';
+        const isAdmin = adminCheck?.role === 'admin' ||
+            adminCheck?.role === 'owner' ||
+            ['co_admin', 'club_coordinator', 'club_co_coordinator', 'club_head'].includes(adminCheck?.role);
 
-        if (!isTeamMember && !isAdmin) {
+        // Simpler bypass if they are the coordinator of the project's club or an admin of the college
+        const isAuthorizedToView = isAdmin && (adminCheck.role === 'owner' || adminCheck.college === project.college);
+
+        if (!isTeamMember && !isAuthorizedToView) {
             // Hide sensitive data for non-members
             const publicProject = project.toObject();
             delete publicProject.joinCode;
@@ -138,6 +147,12 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 });
+
+// Helper to check if project is paused
+const checkProjectPaused = async (projectId) => {
+    const project = await Project.findById(projectId);
+    return project && project.status === 'on_hold';
+};
 
 // CREATE a project (starts as PENDING proposal)
 router.post('/', async (req, res) => {
@@ -213,7 +228,7 @@ router.post('/:id/approve', async (req, res) => {
         });
         await notification.save();
 
-        res.json({ message: 'Project approved. Rewards will be issued upon completion.', project: await Project.findById(project._id).populate('team', 'name email').populate('requestedBy', 'name email') });
+        res.json({ message: 'Project approved. Rewards will be issued upon completion.', project: await Project.findById(project._id).populate('team', 'name email avatar').populate('requestedBy', 'name email avatar') });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -262,6 +277,8 @@ router.post('/join-by-code', async (req, res) => {
             return res.status(400).json({ message: 'You are already in this team' });
         }
 
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused. Action not allowed.' });
+
         project.team.push(userId);
         await project.save();
 
@@ -276,7 +293,7 @@ router.post('/join-by-code', async (req, res) => {
 
         await user.save();
 
-        res.json({ message: 'Successfully joined project team', user, project: await Project.findById(project._id).populate('team', 'name email') });
+        res.json({ message: 'Successfully joined project team', user, project: await Project.findById(project._id).populate('team', 'name email avatar') });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -287,6 +304,7 @@ router.post('/:id/complete', async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused. Resume before completing.' });
         if (project.status === 'completed') return res.status(400).json({ message: 'Project already completed' });
 
         project.status = 'completed';
@@ -368,6 +386,7 @@ router.post('/:id/exit', async (req, res) => {
         const project = await Project.findById(req.params.id);
 
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused. Cannot leave at this time.' });
         if (!project.team.some(member => member.toString() === userId)) return res.status(400).json({ message: 'You are not in this project team' });
 
         // Remove user from team
@@ -483,6 +502,7 @@ router.post('/:id/request-join', async (req, res) => {
         const { userId, reason, skills, experiences, comments } = req.body;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
         project.joinRequests.push({ user: userId, reason, skills, experiences, comments });
         await project.save();
         res.json({ message: 'Request sent successfully' });
@@ -497,6 +517,7 @@ router.post('/:id/requests/:requestId/resolve', async (req, res) => {
         const { status, requestingUserId } = req.body;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
         if (project.requestedBy.toString() !== requestingUserId) return res.status(403).json({ message: 'Only leader can resolve requests' });
         const request = project.joinRequests.id(req.params.requestId);
         if (!request) return res.status(404).json({ message: 'Request not found' });
@@ -517,6 +538,7 @@ router.post('/:id/notify', async (req, res) => {
         const { title, message, senderId } = req.body;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
         const notifications = project.team.map(m => ({ recipient: m, sender: senderId, title, message }));
         await Notification.insertMany(notifications);
         res.json({ message: 'Notifications sent' });
@@ -557,6 +579,7 @@ router.patch('/:id/progress', async (req, res) => {
         const { progress, requestingUserId } = req.body;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
         if (project.requestedBy.toString() !== requestingUserId) return res.status(403).json({ message: 'Only leader can update progress' });
         project.progress = progress;
         await project.save();
@@ -583,6 +606,7 @@ router.post('/:id/goals', async (req, res) => {
 
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         if (project.requestedBy.toString() !== requestingUserId) {
             return res.status(403).json({ message: 'Only the project leader can set goals' });
@@ -598,7 +622,7 @@ router.post('/:id/goals', async (req, res) => {
             requirementKey: req.body.requirementKey
         });
         await project.save();
-        const populatedProject = await Project.findById(req.params.id).populate('team', 'name email');
+        const populatedProject = await Project.findById(req.params.id).populate('team', 'name email avatar');
         res.status(201).json(populatedProject);
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -611,6 +635,7 @@ router.patch('/:id/goals/:goalId', async (req, res) => {
         const { title, description, deadline, assignees, assignedType, requestingUserId } = req.body;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         if (project.requestedBy.toString() !== requestingUserId) {
             return res.status(403).json({ message: 'Only the project leader can update missions' });
@@ -636,7 +661,7 @@ router.patch('/:id/goals/:goalId', async (req, res) => {
         if (req.body.submissionKey !== undefined) goal.submissionKey = req.body.submissionKey;
 
         await project.save();
-        const populatedProject = await Project.findById(req.params.id).populate('team', 'name email');
+        const populatedProject = await Project.findById(req.params.id).populate('team', 'name email avatar');
         res.json(populatedProject);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -649,6 +674,7 @@ router.post('/:id/goals/:goalId/submit', async (req, res) => {
         const { submissionLink, submissionTitle, submissionDescription, submissionKey, requestingUserId } = req.body;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         const goal = project.timeGoals.id(req.params.goalId);
         if (!goal) return res.status(404).json({ message: 'Mission not found' });
@@ -687,7 +713,7 @@ router.post('/:id/goals/:goalId/submit', async (req, res) => {
         });
 
         await project.save();
-        const populatedProject = await Project.findById(req.params.id).populate('team', 'name email');
+        const populatedProject = await Project.findById(req.params.id).populate('team', 'name email avatar');
         res.json(populatedProject);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -700,6 +726,7 @@ router.patch('/:id/goals/:goalId/review', async (req, res) => {
         const { status, requestingUserId } = req.body; // status: 'approved' or 'rejected'
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         if (project.requestedBy.toString() !== requestingUserId) {
             return res.status(403).json({ message: 'Only the project leader can review goals' });
@@ -717,7 +744,7 @@ router.patch('/:id/goals/:goalId/review', async (req, res) => {
         }
 
         await project.save();
-        const populatedProject = await Project.findById(req.params.id).populate('team', 'name email');
+        const populatedProject = await Project.findById(req.params.id).populate('team', 'name email avatar');
         res.json(populatedProject);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -732,6 +759,7 @@ router.post('/:id/goals/:goalId/accomplish', async (req, res) => {
 
         const project = await Project.findById(id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         const goal = project.timeGoals.id(goalId);
         if (!goal) return res.status(404).json({ message: 'Mission not found' });
@@ -755,8 +783,8 @@ router.post('/:id/goals/:goalId/accomplish', async (req, res) => {
 
         await project.save();
         const populatedProject = await Project.findById(id)
-            .populate('team', 'name email')
-            .populate('joinRequests.user', 'name email');
+            .populate('team', 'name email avatar')
+            .populate('joinRequests.user', 'name email avatar');
         res.json(populatedProject);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -771,6 +799,7 @@ router.post('/:id/goals/:goalId/request-postpone', async (req, res) => {
 
         const project = await Project.findById(id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         const goal = project.timeGoals.id(goalId);
         if (!goal) return res.status(404).json({ message: 'Mission not found' });
@@ -811,6 +840,8 @@ router.delete('/:id/members/:memberId', async (req, res) => {
         const { requestingUserId } = req.query;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        // Allow member removal even if paused if user explicitly wants to 'enable' it
+        // if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         if (project.requestedBy.toString() !== requestingUserId) {
             return res.status(403).json({ message: 'Only the project leader can remove members' });
@@ -835,6 +866,7 @@ router.patch('/:id/details', async (req, res) => {
         const { description, idea, problemStatement, requestingUserId } = req.body;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         if (project.requestedBy.toString() !== requestingUserId) {
             return res.status(403).json({ message: 'Only the project leader can update details' });
@@ -844,10 +876,11 @@ router.patch('/:id/details', async (req, res) => {
         if (idea !== undefined) project.idea = idea;
         if (problemStatement !== undefined) project.problemStatement = problemStatement;
         if (req.body.teamName !== undefined) project.teamName = req.body.teamName;
+        if (req.body.joinCode !== undefined) project.joinCode = req.body.joinCode;
 
         await project.save();
         const populatedProject = await Project.findById(req.params.id)
-            .populate('team', 'name email')
+            .populate('team', 'name email avatar')
             .populate('joinRequests.user', 'name email avatar');
         res.json(populatedProject);
     } catch (err) {
@@ -861,6 +894,7 @@ router.delete('/:id/goals/:goalId', async (req, res) => {
         const { requestingUserId } = req.query;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        // if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         if (project.requestedBy.toString() !== requestingUserId) {
             return res.status(403).json({ message: 'Only the project leader can remove goals' });
@@ -880,6 +914,7 @@ router.post('/:id/resources', async (req, res) => {
         const { title, description, url, addedBy, addedByName } = req.body;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         if (!project.team.some(member => member.toString() === addedBy)) {
             return res.status(403).json({ message: 'Only team members can add resources' });
@@ -899,6 +934,7 @@ router.delete('/:id/resources/:resourceId', async (req, res) => {
         const { requestingUserId } = req.query;
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+        // if (project.status === 'on_hold') return res.status(403).json({ message: 'Project is paused.' });
 
         const resource = project.resources.id(req.params.resourceId);
         if (!resource) return res.status(404).json({ message: 'Resource not found' });

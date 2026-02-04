@@ -24,17 +24,14 @@ import {
   Instagram,
   Linkedin,
   Globe,
-  Settings,
   UserPlus,
   ChevronLeft,
   Send,
   Loader2,
-  BarChart2,
-  Trash2,
   Plus,
   Shield,
-  ShieldCheck,
   Zap,
+  Swords,
   X,
   ArrowRight,
   Calendar,
@@ -49,8 +46,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-  DialogFooter
+  DialogTrigger
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
@@ -242,6 +238,7 @@ function ClubDetailContent() {
     { id: 'challenges', label: 'Challenges', icon: Trophy },
     { id: 'members', label: 'Members', icon: Users },
     { id: 'about', label: 'About', icon: Info },
+    { id: 'gallery', label: 'Gallery', icon: Globe },
     { id: 'chat', label: 'Chat', icon: MessageSquare },
     { id: 'events', label: 'Events', icon: History },
     { id: 'achievements', label: 'Achievements', icon: Award },
@@ -277,10 +274,11 @@ function ClubDetailContent() {
             </Avatar>
 
             <div className="flex-1 pb-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="flex flex-col">
                 <h1 className="text-2xl sm:text-3xl font-bold">{club?.name || 'Club'}</h1>
-                <Badge variant="secondary">{club?.category || 'General'}</Badge>
+                {club?.tagline && <p className="text-sm font-medium text-primary/80 uppercase tracking-widest mt-1">{club.tagline}</p>}
               </div>
+              <Badge variant="secondary">{club?.category || 'General'}</Badge>
               <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Users className="h-4 w-4" />
@@ -423,28 +421,75 @@ function ClubDetailContent() {
 
               </CardHeader>
               <CardContent className="space-y-6">
-                <p className="whitespace-pre-wrap text-muted-foreground">{club.description || 'No description provided.'}</p>
+                <p className="whitespace-pre-wrap text-muted-foreground leading-relaxed">{club.description || 'No description provided.'}</p>
+
+                {/* Vision & Mission */}
+                {(club.vision || club.mission) && (
+                  <div className="grid md:grid-cols-2 gap-6 pt-4">
+                    {club.vision && (
+                      <div className="space-y-2 p-4 rounded-xl bg-primary/5 border border-primary/10">
+                        <h4 className="font-black text-xs uppercase tracking-widest text-primary flex items-center gap-2">
+                          <Zap className="h-3 w-3" /> Vision
+                        </h4>
+                        <p className="text-sm text-muted-foreground leading-relaxed">{club.vision}</p>
+                      </div>
+                    )}
+                    {club.mission && (
+                      <div className="space-y-2 p-4 rounded-xl bg-secondary/30 border border-secondary/50">
+                        <h4 className="font-black text-xs uppercase tracking-widest text-secondary-foreground flex items-center gap-2">
+                          <Swords className="h-3 w-3" /> Mission
+                        </h4>
+                        <p className="text-sm text-muted-foreground leading-relaxed">{club.mission}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Contact Information */}
+                {(club.contactEmail || club.contactPhone) && (
+                  <div className="pt-4 border-t">
+                    <h4 className="font-bold text-sm mb-3">Contact Information</h4>
+                    <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                      {club.contactEmail && (
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+                            <Send className="h-4 w-4" />
+                          </div>
+                          {club.contactEmail}
+                        </div>
+                      )}
+                      {club.contactPhone && (
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+                            <Users className="h-4 w-4" />
+                          </div>
+                          {club.contactPhone}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Social Links */}
                 {(club.socialLinks?.instagram || club.socialLinks?.linkedin || club.socialLinks?.website) && (
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 pt-4">
                     {club.socialLinks.instagram && (
                       <a href={club.socialLinks.instagram} target="_blank" rel="noopener noreferrer">
-                        <Button variant="outline" size="icon">
+                        <Button variant="outline" size="icon" className="rounded-full shadow-sm">
                           <Instagram className="h-4 w-4" />
                         </Button>
                       </a>
                     )}
                     {club.socialLinks.linkedin && (
                       <a href={club.socialLinks.linkedin} target="_blank" rel="noopener noreferrer">
-                        <Button variant="outline" size="icon">
+                        <Button variant="outline" size="icon" className="rounded-full shadow-sm">
                           <Linkedin className="h-4 w-4" />
                         </Button>
                       </a>
                     )}
                     {club.socialLinks.website && (
                       <a href={club.socialLinks.website} target="_blank" rel="noopener noreferrer">
-                        <Button variant="outline" size="icon">
+                        <Button variant="outline" size="icon" className="rounded-full shadow-sm">
                           <Globe className="h-4 w-4" />
                         </Button>
                       </a>
@@ -453,6 +498,45 @@ function ClubDetailContent() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Gallery Tab */}
+          <TabsContent value="gallery" className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h2 className="text-xl font-bold tracking-tight">Club Gallery</h2>
+                <p className="text-sm text-muted-foreground">Capturing moments and memories from our club activities.</p>
+              </div>
+            </div>
+
+            {Array.isArray(club.gallery) && club.gallery.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {club.gallery.map((img: any, idx: number) => (
+                  <div key={idx} className="group relative aspect-video overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
+                    <img
+                      src={img}
+                      alt={`Gallery ${idx + 1}`}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+                      <p className="text-white text-xs font-medium">Moment from {club.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Card className="border-dashed border-2 bg-slate-50/50">
+                <CardContent className="py-20 text-center space-y-4">
+                  <div className="h-20 w-20 bg-white shadow-sm border border-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Globe className="h-10 w-10 text-slate-200" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-black text-slate-400 uppercase text-xs tracking-[0.2em]">Gallery Empty</p>
+                    <p className="text-sm text-slate-400 max-w-[280px] mx-auto">No photos have been uploaded to the club gallery yet.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Chat Tab */}
@@ -466,7 +550,7 @@ function ClubDetailContent() {
               </CardHeader>
 
               <CardContent className="flex-1 flex flex-col p-4">
-                {!(user?.role === 'owner' || user?.role === 'admin' || user?.role === 'co_admin' || user?.role === 'club_coordinator' || user?.role === 'club_co_coordinator' || user?.role === 'club_head' || user?.role === 'core_member') ? (
+                {!(user?.role === 'owner' || user?.role === 'admin' || user?.role === 'club_coordinator' || user?.role === 'club_head' || user?.role === 'core_member') ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
                     <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
                       <Shield className="h-8 w-8 text-primary" />
@@ -659,32 +743,101 @@ function ClubDetailContent() {
             {Array.isArray(club.achievements) && club.achievements.length > 0 ? (
               <div className="grid sm:grid-cols-2 gap-4">
                 {club.achievements.map((achievement: any, idx: number) => (
-                  <Card key={idx} className="group hover:border-primary/30 transition-all">
+                  <Card key={idx} className="group hover:border-primary/30 transition-all overflow-hidden border-none shadow-sm ring-1 ring-slate-200 bg-white">
                     <CardContent className="p-5 flex items-start gap-4">
                       <div className="h-12 w-12 rounded-2xl bg-yellow-500/10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-                        <Trophy className="h-6 w-6 text-yellow-600" />
+                        {achievement.icon ? (
+                          <span className="text-2xl">{achievement.icon}</span>
+                        ) : (
+                          <Trophy className="h-6 w-6 text-yellow-600" />
+                        )}
                       </div>
                       <div className="space-y-1 flex-1">
-                        <h3 className="font-bold leading-tight">{achievement.title}</h3>
-                        <p className="text-xs text-muted-foreground">
-                          {achievement.earnedAt ? new Date(achievement.earnedAt).getFullYear() : 'Recent'}
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{achievement.description}</p>
-                        <EventDetailsDialog item={achievement} title="Achievement" />
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <h3 className="font-extrabold text-base leading-tight group-hover:text-primary transition-colors">{achievement.title}</h3>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+                              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {achievement.earnedAt ? safeFormat(achievement.earnedAt, 'MMMM yyyy') : 'Recent'}
+                              </p>
+                              {achievement.location && (
+                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {achievement.location}
+                                </p>
+                              )}
+                              {achievement.rank && (
+                                <Badge variant="secondary" className="h-5 text-[10px] px-2 bg-yellow-500/10 text-yellow-700 border-none">
+                                  {achievement.rank}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{achievement.description}</p>
+
+                        {/* Chief Guests */}
+                        {Array.isArray(achievement.chiefGuests) && achievement.chiefGuests.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-100">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Chief Guests</p>
+                            <div className="flex flex-wrap gap-2">
+                              {achievement.chiefGuests.map((cg: any, i: number) => (
+                                <div key={i} className="flex flex-col">
+                                  <span className="text-xs font-bold text-slate-700">{cg.name}</span>
+                                  <span className="text-[10px] text-slate-500">{cg.designation}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Winners & Prizes */}
+                        {Array.isArray(achievement.winners) && achievement.winners.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-100">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Winners & Accolades</p>
+                            <div className="flex flex-wrap gap-2">
+                              {achievement.winners.map((w: any, i: number) => (
+                                <Badge key={i} variant="outline" className="text-[10px] bg-slate-50/50 py-1">
+                                  {w.prize} - {w.position}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Drive Link - More Prominent */}
+                        {achievement.driveLink && (
+                          <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="w-full sm:w-auto h-9 text-xs font-bold gap-2 bg-primary/5 hover:bg-primary/10 text-primary border-none shadow-none"
+                              asChild
+                            >
+                              <a href={achievement.driveLink} target="_blank" rel="noopener noreferrer">
+                                <Globe className="h-3.5 w-3.5" />
+                                View Event Gallery
+                              </a>
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
                 ))}
               </div>
             ) : (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <div className="h-16 w-16 bg-secondary/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Award className="h-8 w-8 text-muted-foreground/50" />
+              <Card className="border-dashed border-2 bg-slate-50/50">
+                <CardContent className="py-20 text-center space-y-4">
+                  <div className="h-20 w-20 bg-white shadow-sm border border-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Award className="h-10 w-10 text-slate-200" />
                   </div>
-                  <p className="text-muted-foreground">
-                    Achievements coming soon!
-                  </p>
+                  <div className="space-y-1">
+                    <p className="font-black text-slate-400 uppercase text-xs tracking-[0.2em]">No Achievements Recorded</p>
+                    <p className="text-sm text-slate-400 max-w-[280px] mx-auto">This club hasn't listed any official accolades in their registry yet.</p>
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -693,14 +846,16 @@ function ClubDetailContent() {
       </div>
 
       {/* Report Dialog for History Items */}
-      {reportItem && (
-        <EventDetailsDialog
-          item={reportItem}
-          title="Challenge Report"
-          open={!!reportItem}
-          onOpenChange={(open) => !open && setReportItem(null)}
-        />
-      )}
+      {
+        reportItem && (
+          <EventDetailsDialog
+            item={reportItem}
+            title="Challenge Report"
+            open={!!reportItem}
+            onOpenChange={(open: boolean) => !open && setReportItem(null)}
+          />
+        )
+      }
     </Layout>
   );
 }
@@ -916,7 +1071,7 @@ function MembersList({ clubId }: { clubId: string }) {
   );
 }
 
-function EventReportContent({ item, onClose }: { item: any, title: string, onClose?: () => void }) {
+function EventReportContent({ item, onClose }: { item: any, title?: string, onClose?: () => void }) {
   const challengeId = item?.challengeId || item?.id || (item?._id && typeof item._id === 'string' && !item._id.startsWith('history-') ? item._id : null);
 
   // Connect to Backend: Fetch live data if available
@@ -1087,51 +1242,4 @@ export default function ClubDetail() {
   );
 }
 
-function EditAboutDialog({ club }: { club: any }) {
-  const [description, setDescription] = useState(club.description || '');
-  const [open, setOpen] = useState(false);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  const updateMutation = useMutation({
-    mutationFn: (data: any) => api.updateClub(club.id || club._id, data),
-    onSuccess: () => {
-      toast({ title: 'Club description updated!' });
-      queryClient.invalidateQueries({ queryKey: ['club', club.id || club._id] });
-      setOpen(false);
-    },
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Settings className="h-4 w-4 mr-2" />
-          Edit About
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit Club Information</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <textarea
-              className="w-full min-h-[150px] p-3 rounded-md border bg-background"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Write about your club..."
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={() => updateMutation.mutate({ description })} disabled={updateMutation.isPending}>
-            {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : 'Save Changes'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

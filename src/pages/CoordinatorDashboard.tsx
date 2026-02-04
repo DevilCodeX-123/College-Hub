@@ -5,14 +5,26 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { RoleGate } from '@/components/common/RoleGate';
 import { ClubCoordinatorView } from '@/components/club/ClubCoordinatorView';
+import { useParams } from 'react-router-dom';
 
 export default function CoordinatorDashboard() {
     const { user } = useAuth();
+    const { clubId } = useParams();
 
-    // Fetch Club by Coordinator ID
+    // Fetch Club by ID from URL OR fetch user's first managed club if no ID provided
     const { data: club, isLoading, error } = useQuery({
-        queryKey: ['my-club', user?.id],
-        queryFn: () => user ? api.getClubByCoordinator(user.id, user.id) : null,
+        queryKey: ['my-club', user?.id, clubId],
+        queryFn: async () => {
+            if (!user) return null;
+
+            if (clubId) {
+                return api.getClub(clubId, user.id);
+            }
+
+            // Fallback to first managed club if no ID in URL
+            const managed = await api.getManagedClubs(user.id, user.id);
+            return managed && managed.length > 0 ? managed[0] : null;
+        },
         enabled: !!user,
         retry: false
     });
@@ -36,7 +48,7 @@ export default function CoordinatorDashboard() {
     }
 
     return (
-        <RoleGate allowedRoles={['club_coordinator', 'club_co_coordinator', 'club_head', 'core_member']}>
+        <RoleGate allowedRoles={['club_coordinator', 'club_head', 'core_member']}>
             {(!club) ? (
                 <Layout>
                     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">

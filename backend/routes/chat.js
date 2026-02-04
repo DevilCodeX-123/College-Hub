@@ -57,6 +57,11 @@ router.post('/project/:projectId', async (req, res) => {
     const { content, senderId } = req.body;
 
     try {
+        const project = await Project.findById(req.params.projectId);
+        if (project && project.status === 'on_hold') {
+            return res.status(403).json({ message: 'Project is paused. Chat disabled.' });
+        }
+
         const newMessage = new Message({
             content,
             sender: senderId,

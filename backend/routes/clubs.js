@@ -50,7 +50,42 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET club by coordinator ID or core team membership
+// GET all clubs managed by a user (Coordinator, Head, or Core Team)
+router.get('/managed/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const requestingUser = await User.findById(req.query.requestingUserId || userId);
+
+        let query = {
+            $or: [
+                { coordinatorId: userId },
+                { 'coreTeam.userId': userId }
+            ]
+        };
+
+        // Owner can see everything, but for "managed" they usually want their own or all
+        if (requestingUser && requestingUser.role === 'owner') {
+            // For consistency let owner see all clubs as "managed" or keep it specific
+            // Let's keep it specific to where they are actually listed if they want "MY" clubs
+        }
+
+        const clubs = await Club.find(query).lean();
+
+        const enhancedClubs = await Promise.all(clubs.map(async (club) => {
+            club.id = club._id.toString();
+            const actualCount = await User.countDocuments({ joinedClubs: club._id });
+            club.memberCount = actualCount;
+            return club;
+        }));
+
+        res.json(enhancedClubs);
+    } catch (err) {
+        console.error('[Managed Clubs Error]', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// GET club by coordinator ID or core team membership (Fallback/Single Compatibility)
 router.get('/coordinator/:userId', async (req, res) => {
     try {
 
@@ -463,6 +498,25 @@ router.post('/:id/achievements', async (req, res) => {
     }
 });
 
+// UPDATE Achievement
+router.put('/:id/achievements/:itemId', async (req, res) => {
+    try {
+        const club = await Club.findById(req.params.id);
+        if (!club) return res.status(404).json({ message: 'Club not found' });
+
+        const achievement = club.achievements.id(req.params.itemId);
+        if (!achievement) return res.status(404).json({ message: 'Achievement not found' });
+
+        // Update fields
+        Object.assign(achievement, req.body);
+
+        await club.save();
+        res.json({ message: 'Achievement updated', club });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // DELETE Achievement
 router.delete('/:id/achievements/:itemId', async (req, res) => {
     try {
@@ -562,13 +616,27 @@ router.post('/:id/core-team', async (req, res) => {
             }
         }
 
+        const ROLE_HIERARCHY = {
+            'owner': 100,
+            'admin': 5,
+            'club_coordinator': 4,
+            'club_head': 3,
+            'core_member': 2,
+            'club_member': 1,
+            'student': 0
+        };
+
         // Handle Coordinator Replacement
         if (role === 'club_coordinator') {
-            // Downgrade existing coordinator if exists
             const existingCoord = club.coreTeam.find(m => m.role === 'club_coordinator');
-            if (existingCoord) {
+            if (existingCoord && existingCoord.userId !== userId) {
                 existingCoord.role = 'core_member';
-                await User.findByIdAndUpdate(existingCoord.userId, { role: 'core_member' });
+                // Only demote user if they don't have higher roles globally (simple check for now)
+                const coordUser = await User.findById(existingCoord.userId);
+                if (coordUser && (ROLE_HIERARCHY[coordUser.role] || 0) <= ROLE_HIERARCHY['club_coordinator']) {
+                    coordUser.role = 'core_member';
+                    await coordUser.save();
+                }
             }
         }
 
@@ -578,13 +646,21 @@ router.post('/:id/core-team', async (req, res) => {
             if (existingHead) {
                 existingHead.role = 'core_member';
                 existingHead.customTitle = 'Former Head';
-                await User.findByIdAndUpdate(existingHead.userId, { role: 'core_member' });
+                const headUser = await User.findById(existingHead.userId);
+                if (headUser && (ROLE_HIERARCHY[headUser.role] || 0) <= ROLE_HIERARCHY['club_head']) {
+                    headUser.role = 'core_member';
+                    await headUser.save();
+                }
             }
         }
 
-        // Update User Role
-        user.role = role;
-        await user.save();
+        // Update User Role globally ONLY if the new role is higher than current OR current is basic
+        const currentPower = ROLE_HIERARCHY[user.role] || 0;
+        const newPower = ROLE_HIERARCHY[role] || 0;
+        if (newPower > currentPower || currentPower <= 2) {
+            user.role = role;
+            await user.save();
+        }
 
         // Update Club Core Team Array
         club.coreTeam = club.coreTeam.filter(m => m.userId !== userId);

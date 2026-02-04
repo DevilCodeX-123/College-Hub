@@ -72,7 +72,6 @@ const Projects = lazy(() => import("./pages/Projects"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
-const CoAdminDashboard = lazy(() => import("./pages/CoAdminDashboard"));
 const CoordinatorDashboard = lazy(() => import("./pages/CoordinatorDashboard"));
 const OwnerDashboard = lazy(() => import("./pages/OwnerDashboard"));
 const CampusMap = lazy(() => import("./pages/CampusMap"));
@@ -82,9 +81,205 @@ const ProjectChat = lazy(() => import("./pages/ProjectChat"));
 const Events = lazy(() => import("./pages/Events"));
 const Notes = lazy(() => import("./pages/Notes"));
 const Help = lazy(() => import("./pages/Help"));
+const AdRequest = lazy(() => import("./pages/AdRequest"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
+
+import { AnimatePresence } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
+import { PageTransition } from '@/components/common/PageTransition';
+
+// ... existing imports
+
+const AppRoutes = () => {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Index />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/login" element={
+          <PageTransition>
+            <Login />
+          </PageTransition>
+        } />
+        <Route path="/register" element={
+          <PageTransition>
+            <Register />
+          </PageTransition>
+        } />
+        <Route path="/onboarding" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Onboarding />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/clubs" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Clubs />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/clubs/:id" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <ClubDetail />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/challenges" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Challenges />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/projects" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Projects />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/projects/:id/chat" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <ProjectChat />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Profile />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/leaderboard" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Leaderboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <AdminDashboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/club-coordinator" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <CoordinatorDashboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/club-coordinator/:clubId" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <CoordinatorDashboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/club-head" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <CoordinatorDashboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/club-head/:clubId" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <CoordinatorDashboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/core-team" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <CoordinatorDashboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/core-team/:clubId" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <CoordinatorDashboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/owner" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <OwnerDashboard />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/campus-map" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <CampusMap />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/activity" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Activity />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/badges" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Badges />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/events" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Events />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/notes" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Notes />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/help" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <Help />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="/request-ad" element={
+          <ProtectedRoute>
+            <PageTransition>
+              <AdRequest />
+            </PageTransition>
+          </ProtectedRoute>
+        } />
+        <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
+      </Routes>
+    </AnimatePresence>
+  );
+};
 
 const App = () => (
   <GlobalErrorBoundary>
@@ -97,122 +292,7 @@ const App = () => (
               <Sonner />
               <BrowserRouter>
                 <Suspense fallback={<Loading />}>
-                  <Routes>
-                    {/* ... (all routes) */}
-                    <Route path="/" element={
-                      <ProtectedRoute>
-                        <Index />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route path="/onboarding" element={
-                      <ProtectedRoute>
-                        <Onboarding />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/clubs" element={
-                      <ProtectedRoute>
-                        <Clubs />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/clubs/:id" element={
-                      <ProtectedRoute>
-                        <ClubDetail />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/challenges" element={
-                      <ProtectedRoute>
-                        <Challenges />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/projects" element={
-                      <ProtectedRoute>
-                        <Projects />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/projects/:id/chat" element={
-                      <ProtectedRoute>
-                        <ProjectChat />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/profile" element={
-                      <ProtectedRoute>
-                        <Profile />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/leaderboard" element={
-                      <ProtectedRoute>
-                        <Leaderboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/admin" element={
-                      <ProtectedRoute>
-                        <AdminDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/co-admin" element={
-                      <ProtectedRoute>
-                        <CoAdminDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/club-coordinator" element={
-                      <ProtectedRoute>
-                        <CoordinatorDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/club-co-coordinator" element={
-                      <ProtectedRoute>
-                        <CoordinatorDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/club-head" element={
-                      <ProtectedRoute>
-                        <CoordinatorDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/core-team" element={
-                      <ProtectedRoute>
-                        <CoordinatorDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/owner" element={
-                      <ProtectedRoute>
-                        <OwnerDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/campus-map" element={
-                      <ProtectedRoute>
-                        <CampusMap />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/activity" element={
-                      <ProtectedRoute>
-                        <Activity />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/badges" element={
-                      <ProtectedRoute>
-                        <Badges />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/events" element={
-                      <ProtectedRoute>
-                        <Events />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/notes" element={
-                      <ProtectedRoute>
-                        <Notes />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/help" element={
-                      <ProtectedRoute>
-                        <Help />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
+                  <AppRoutes />
                 </Suspense>
               </BrowserRouter>
             </TooltipProvider>

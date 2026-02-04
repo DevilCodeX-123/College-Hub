@@ -18,7 +18,10 @@ import {
     CheckCircle,
     FileText,
     ArrowLeft,
-    ChevronRight
+    HelpCircle,
+    Trophy,
+    FolderKanban,
+    Megaphone
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
@@ -28,8 +31,8 @@ import { CollegeManagementPanel } from '@/components/owner/CollegeManagementPane
 import { UserDetailsDialog } from '@/components/owner/UserDetailsDialog';
 import { PlatformSettingsDialog } from '@/components/owner/PlatformSettingsDialog';
 import { HelpManagement } from '@/components/owner/HelpManagement';
-import { MessageSquare, HelpCircle, Trophy, FolderKanban } from 'lucide-react';
 import { ComprehensiveClubSettingsDialog } from '@/components/owner/ComprehensiveClubSettingsDialog';
+import { AdManagement } from '@/components/owner/AdManagement';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 export default function OwnerDashboard() {
@@ -113,7 +116,7 @@ export default function OwnerDashboard() {
         }
 
         // Default view: Only Admins/Owners (excluding self)
-        return matchesSearch && (u.role === 'admin' || u.role === 'owner' || u.role === 'co_admin');
+        return matchesSearch && (u.role === 'admin' || u.role === 'owner');
     });
 
     return (
@@ -175,6 +178,7 @@ export default function OwnerDashboard() {
                                 { id: 'help', label: 'Support', icon: HelpCircle },
                                 { id: 'colleges', label: 'Colleges', icon: Building2 },
                                 { id: 'clubs', label: 'Clubs', icon: Trophy },
+                                { id: 'ads', label: 'Ads', icon: Megaphone },
                                 { id: 'logs', label: 'Audit', icon: FileText },
                             ].map((tab) => (
                                 <TabsTrigger
@@ -397,9 +401,40 @@ export default function OwnerDashboard() {
                                                 </div>
                                                 <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
                                                     <div className="flex flex-wrap gap-1 sm:gap-2">
+                                                        {/* Primary Role */}
                                                         <Badge variant={userItem.role === 'owner' ? 'default' : 'secondary'} className="text-[10px]">
-                                                            {userItem.role}
+                                                            {userItem.role === 'admin' ? 'Admin' :
+                                                                userItem.role === 'club_coordinator' ? 'Coordinator' :
+                                                                    userItem.role === 'club_head' ? 'Secretary' :
+                                                                        userItem.role === 'core_member' ? 'Core Member' :
+                                                                            userItem.role === 'club_member' ? 'Club Member' :
+                                                                                userItem.role === 'owner' ? 'Owner' :
+                                                                                    userItem.role}
                                                         </Badge>
+
+                                                        {/* Club-Specific Roles */}
+                                                        {userItem.clubRoles && userItem.clubRoles.length > 0 && (
+                                                            userItem.clubRoles.slice(0, 2).map((clubRole: any, idx: number) => {
+                                                                const roleLabel =
+                                                                    clubRole.role === 'club_coordinator' ? 'Coordinator' :
+                                                                        clubRole.role === 'club_head' ? 'Secretary' :
+                                                                            clubRole.role === 'club_co_coordinator' ? 'Co-Coordinator' :
+                                                                                clubRole.role === 'core_member' ? 'Core' :
+                                                                                    'Member';
+
+                                                                return (
+                                                                    <Badge key={idx} variant="outline" className="text-[10px] bg-purple-50/50">
+                                                                        {clubRole.clubName} {roleLabel}
+                                                                    </Badge>
+                                                                );
+                                                            })
+                                                        )}
+                                                        {userItem.clubRoles && userItem.clubRoles.length > 2 && (
+                                                            <Badge variant="outline" className="text-[10px]">
+                                                                +{userItem.clubRoles.length - 2} more
+                                                            </Badge>
+                                                        )}
+
                                                         <Badge variant="outline" className="text-[10px]">{userItem.points} XP</Badge>
                                                         {userItem.blocked?.website ? (
                                                             <Badge variant="destructive" className="text-[10px]">
@@ -414,21 +449,6 @@ export default function OwnerDashboard() {
                                                         )}
                                                     </div>
                                                     <div className="flex gap-2 items-center">
-                                                        {!viewingCollege && (userItem.role === 'admin' || userItem.role === 'club_coordinator') && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-8 gap-1.5 font-bold border-amber-500/20 bg-amber-500/5 text-amber-600 hover:bg-amber-600 hover:text-white transition-all shadow-sm group"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setViewingCollege(userItem.college);
-                                                                    setSearchQuery('');
-                                                                }}
-                                                            >
-                                                                <Users className="h-3.5 w-3.5" />
-                                                                <span>Change Admin</span>
-                                                            </Button>
-                                                        )}
                                                         {viewingCollege && userItem.role === 'student' && (
                                                             <Button
                                                                 variant="default"
@@ -468,6 +488,11 @@ export default function OwnerDashboard() {
                     {/* Help Management Tab */}
                     <TabsContent value="help" className="space-y-6">
                         <HelpManagement />
+                    </TabsContent>
+
+                    {/* Ad Management Tab */}
+                    <TabsContent value="ads" className="space-y-6">
+                        <AdManagement />
                     </TabsContent>
 
                     {/* Colleges Tab */}

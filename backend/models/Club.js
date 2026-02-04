@@ -18,6 +18,12 @@ const clubSchema = new mongoose.Schema({
         linkedin: String,
         website: String
     },
+    tagline: String,
+    vision: String,
+    mission: String,
+    contactEmail: String,
+    contactPhone: String,
+    gallery: [String],
     coreTeam: [{
         userId: String,
         name: String,
@@ -35,6 +41,9 @@ const clubSchema = new mongoose.Schema({
         description: String,
         icon: String,
         earnedAt: Date,
+        location: String,
+        rank: String,
+        driveLink: String,
         // Detailed Fields
         organizingClub: String,
         collaboratingClubs: [String],

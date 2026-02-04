@@ -52,6 +52,12 @@ export const api = {
         });
         return response.data;
     },
+    getManagedClubs: async (userId: string, requestingUserId?: string) => {
+        const response = await axios.get<Club[]>(`${API_URL}/clubs/managed/${userId}`, {
+            params: { requestingUserId }
+        });
+        return response.data;
+    },
     createClub: async (clubData: Partial<Club>) => {
         const response = await axios.post<Club>(`${API_URL}/clubs`, clubData);
         return response.data;
@@ -108,6 +114,10 @@ export const api = {
         const response = await axios.post(`${API_URL}/clubs/${clubId}/achievements`, achievementData, getAuthDetails());
         return response.data;
     },
+    updateClubAchievement: async (clubId: string, itemId: string, achievementData: any) => {
+        const response = await axios.put(`${API_URL}/clubs/${clubId}/achievements/${itemId}`, achievementData, getAuthDetails());
+        return response.data;
+    },
     deleteClubAchievement: async (clubId: string, itemId: string) => {
         const response = await axios.delete(`${API_URL}/clubs/${clubId}/achievements/${itemId}`, getAuthDetails());
         return response.data;
@@ -147,6 +157,16 @@ export const api = {
     },
     gradeChallengeSubmission: async (challengeId: string, submissionId: string, gradeData: any) => {
         const response = await axios.post(`${API_URL}/challenges/${challengeId}/grade/${submissionId}`, gradeData, getAuthDetails());
+        return response.data;
+    },
+
+    // Platform Config
+    getConfig: async () => {
+        const response = await axios.get(`${API_URL}/config`);
+        return response.data;
+    },
+    updateConfig: async (data: any) => {
+        const response = await axios.put(`${API_URL}/config`, data, getAuthDetails());
         return response.data;
     },
 
@@ -289,6 +309,10 @@ export const api = {
         const response = await axios.post(`${API_URL}/users/${id}/award-badge`, badge, getAuthDetails());
         return response.data;
     },
+    awardBadgeBatch: async (userIds: string[], badge: any) => {
+        const response = await axios.post(`${API_URL}/users/award-badge/batch`, { userIds, badge }, getAuthDetails());
+        return response.data;
+    },
     awardUserSkill: async (id: string, skill: string) => {
         const response = await axios.post(`${API_URL}/users/${id}/add-skill`, { skill }, getAuthDetails());
         return response.data;
@@ -331,8 +355,8 @@ export const api = {
     },
 
     // Notifications
-    getNotifications: async (userId: string, role: string) => {
-        const response = await axios.get(`${API_URL}/notifications`, { params: { userId, role }, ...getAuthDetails() });
+    getNotifications: async (userId?: string, role?: string, recipientId?: string, isManualBroadcast?: boolean, type?: string) => {
+        const response = await axios.get(`${API_URL}/notifications`, { params: { userId, role, recipientId, isManualBroadcast, type }, ...getAuthDetails() });
         return response.data;
     },
     sendNotification: async (data: any) => {
@@ -538,6 +562,53 @@ export const api = {
     },
     deleteFAQItem: async (categoryId: string, itemId: string) => {
         const response = await axios.delete(`${API_URL}/faqs/categories/${categoryId}/items/${itemId}`, getAuthDetails());
+        return response.data;
+    },
+
+    // Ads
+    getAds: async (requestingUserId: string) => {
+        const response = await axios.get(`${API_URL}/ads`, { params: { requestingUserId }, ...getAuthDetails() });
+        return response.data;
+    },
+    getActiveAds: async (college?: string, page?: string, clubId?: string) => {
+        const response = await axios.get(`${API_URL}/ads/active`, { params: { college, page, clubId } });
+        return response.data;
+    },
+    createAd: async (adData: any) => {
+        const response = await axios.post(`${API_URL}/ads`, adData, getAuthDetails());
+        return response.data;
+    },
+    updateAd: async (id: string, adData: any) => {
+        const response = await axios.put(`${API_URL}/ads/${id}`, adData, getAuthDetails());
+        return response.data;
+    },
+    deleteAd: async (id: string, requestingUserId: string) => {
+        const response = await axios.delete(`${API_URL}/ads/${id}`, { params: { requestingUserId }, ...getAuthDetails() });
+        return response.data;
+    },
+    incrementAdView: async (id: string) => {
+        const response = await axios.post(`${API_URL}/ads/${id}/view`);
+        return response.data;
+    },
+    getPendingAds: async (requestingUserId: string) => {
+        const response = await axios.get(`${API_URL}/ads/pending`, { params: { requestingUserId }, ...getAuthDetails() });
+        return response.data;
+    },
+    requestAd: async (adData: any) => {
+        const response = await axios.post(`${API_URL}/ads/request`, adData, getAuthDetails());
+        return response.data;
+    },
+    updateAdStatus: async (id: string, statusData: { status: 'approved' | 'rejected', rejectionReason?: string, requestingUserId: string, paymentStatus?: string }) => {
+        const response = await axios.put(`${API_URL}/ads/${id}/status`, statusData, getAuthDetails());
+        return response.data;
+    },
+    getUserCount: async (requestingUserId?: string) => {
+        const response = await axios.get(`${API_URL}/users/count`, { params: { requestingUserId } });
+        return response.data;
+    },
+    getAdminStats: async (college: string) => {
+        // This is a stub, but required for the CoAdminDashboard to compile
+        const response = await axios.get(`${API_URL}/auth/admin-stats`, { params: { college }, ...getAuthDetails() });
         return response.data;
     },
 };

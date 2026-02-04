@@ -32,7 +32,8 @@ import {
     Zap,
     FolderKanban,
     X,
-    Clock
+    Clock,
+    Square
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -44,6 +45,7 @@ import { ManageClubTasks } from '@/components/dashboard/ManageClubTasks';
 import { ManageClubChallenges } from '@/components/dashboard/ManageClubChallenges';
 import { ClubEventsManager } from '@/components/club/ClubEventsManager';
 import { AssignWorkDialog } from '@/components/club/AssignWorkDialog';
+import { ExtendPollDialog } from '@/components/owner/ExtendPollDialog';
 import {
     Dialog,
     DialogContent,
@@ -51,12 +53,27 @@ import {
     DialogTitle,
     DialogTrigger
 } from "@/components/ui/dialog";
+import { AdRequestForm } from '@/components/common/AdRequestForm';
+import { MyAdRequests } from '@/components/common/MyAdRequests';
 
 interface ClubCoordinatorViewProps {
     clubId: string;
     collegeName: string;
     isImpersonating?: boolean;
 }
+
+const getRoleLabel = (r: string) => {
+    const labels: Record<string, string> = {
+        'club_coordinator': 'Coordinator',
+        'club_head': 'Secretary',
+        'core_member': 'Core Team',
+        'student': 'Student',
+        'admin': 'Admin',
+        'owner': 'Owner'
+    };
+    return labels[r] || r.replace(/_/g, ' ').toUpperCase();
+};
+
 
 export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = false }: ClubCoordinatorViewProps) {
     const { user } = useAuth();
@@ -100,12 +117,18 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
         );
     }
 
-    const isFullCoordinator = isImpersonating || ['owner', 'admin', 'co_admin', 'club_coordinator', 'club_co_coordinator'].includes(user?.role || '');
-    const isSecretary = user?.role === 'club_head';
+    const userClubRole = club.coreTeam?.find((m: any) => m.userId === user?.id)?.role;
+
+    const isFullCoordinator = isImpersonating ||
+        ['owner', 'admin'].includes(user?.role || '') ||
+        userClubRole === 'club_coordinator';
+
+    const isSecretary = userClubRole === 'club_head';
+
     const getDisplayTitle = () => {
         if (!club) return 'Club Management';
         if (isImpersonating) return `Managing: ${club.name}`;
-        if (user?.role === 'club_head') return 'Club Secretary Panel';
+        if (userClubRole === 'club_head') return 'Club Secretary Panel';
         return 'Club Coordinator Panel';
     };
 
@@ -150,7 +173,7 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
                                 <span className="text-lg font-medium tracking-wide leading-none">{club.name}</span>
                                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary/50" />
                                 <span className="text-sm font-semibold uppercase tracking-widest text-primary leading-none">
-                                    {isImpersonating ? (user?.role === 'owner' ? 'OWNER VIEW' : 'ADMIN VIEW') : `${user?.role?.replace('_', ' ').toUpperCase()} VIEW`}
+                                    {isImpersonating ? (user?.role === 'owner' ? 'OWNER VIEW' : 'ADMIN VIEW') : `${getRoleLabel(userClubRole || user?.role || '').toUpperCase()} VIEW`}
                                 </span>
                             </div>
                         </div>
@@ -172,9 +195,10 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
                     )}
                     <TabsTrigger value="tasks"><ClipboardList className="h-4 w-4 mr-2" /> Task Hub</TabsTrigger>
                     <TabsTrigger value="challenges"><Swords className="h-4 w-4 mr-2" /> Challenges</TabsTrigger>
-                    {isFullCoordinator && (
-                        <TabsTrigger value="settings"><Settings className="h-4 w-4 mr-2" /> Settings (Admin)</TabsTrigger>
+                    {(isFullCoordinator || isSecretary) && (
+                        <TabsTrigger value="settings"><Settings className="h-4 w-4 mr-2" /> Club Settings</TabsTrigger>
                     )}
+                    <TabsTrigger value="ads"><Megaphone className="h-4 w-4 mr-2" /> Ads</TabsTrigger>
                 </TabsList>
 
                 {/* Overview Tab */}
@@ -258,8 +282,25 @@ export function ClubCoordinatorView({ clubId, collegeName, isImpersonating = fal
                     </div>
                 </TabsContent>
 
-                <TabsContent value="notifications">
-                    <ClubBroadcasts clubId={clubId} clubName={club.name} />
+                <TabsContent value="broadcasts" className="space-y-6">
+                    <ClubBroadcasts clubId={clubId} clubName={club?.name || ''} />
+                </TabsContent>
+
+                <TabsContent value="ads" className="space-y-6">
+                    <Card className="border-border/50 shadow-xl overflow-hidden">
+                        <CardHeader className="bg-slate-50/50 border-b">
+                            <CardTitle className="flex items-center gap-2">
+                                <Megaphone className="h-5 w-5 text-primary" />
+                                Request Advertisement
+                            </CardTitle>
+                            <CardDescription>Submit a campaign for platform-wide or targeted display. All requests require Owner approval.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                            <AdRequestForm />
+                        </CardContent>
+                    </Card>
+
+                    <MyAdRequests />
                 </TabsContent>
 
                 <TabsContent value="leaderboard">
@@ -393,7 +434,13 @@ function ClubProfileEditor({ club }: { club: any }) {
         linkedin: club.socialLinks?.linkedin || '',
         website: club.socialLinks?.website || '',
         logo: club.logo || '',
-        banner: club.banner || ''
+        banner: club.banner || '',
+        tagline: club.tagline || '',
+        vision: club.vision || '',
+        mission: club.mission || '',
+        contactEmail: club.contactEmail || '',
+        contactPhone: club.contactPhone || '',
+        gallery: club.gallery || []
     });
 
     useEffect(() => {
@@ -404,7 +451,13 @@ function ClubProfileEditor({ club }: { club: any }) {
                 linkedin: club.socialLinks?.linkedin || '',
                 website: club.socialLinks?.website || '',
                 logo: club.logo || '',
-                banner: club.banner || ''
+                banner: club.banner || '',
+                tagline: club.tagline || '',
+                vision: club.vision || '',
+                mission: club.mission || '',
+                contactEmail: club.contactEmail || '',
+                contactPhone: club.contactPhone || '',
+                gallery: club.gallery || []
             });
         }
     }, [club, isEditing]);
@@ -429,6 +482,7 @@ function ClubProfileEditor({ club }: { club: any }) {
                     </Avatar>
                     <div className="flex-1">
                         <p className="text-sm font-semibold">{club.name}</p>
+                        {club.tagline && <p className="text-xs font-bold text-primary uppercase tracking-wider">{club.tagline}</p>}
                         <p className="text-sm text-muted-foreground line-clamp-2">{club.description || "No description."}</p>
                     </div>
                 </div>
@@ -468,12 +522,53 @@ function ClubProfileEditor({ club }: { club: any }) {
             </div>
 
             <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Club Tagline (Short Catchphrase)</Label>
+                <Input
+                    value={form.tagline}
+                    onChange={e => setForm({ ...form, tagline: e.target.value })}
+                    placeholder="e.g. Coding for a better future"
+                />
+            </div>
+
+            <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Club Description</Label>
                 <textarea
                     className="w-full min-h-[100px] p-3 border rounded-xl text-sm bg-background focus:ring-2 focus:ring-primary/20 transition-all outline-none"
                     value={form.description}
                     onChange={e => setForm({ ...form, description: e.target.value })}
                 />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Vision</Label>
+                    <textarea
+                        className="w-full min-h-[80px] p-3 border rounded-xl text-sm bg-background focus:ring-2 focus:ring-primary/20 transition-all outline-none"
+                        value={form.vision}
+                        onChange={e => setForm({ ...form, vision: e.target.value })}
+                        placeholder="Club's long-term vision..."
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mission</Label>
+                    <textarea
+                        className="w-full min-h-[80px] p-3 border rounded-xl text-sm bg-background focus:ring-2 focus:ring-primary/20 transition-all outline-none"
+                        value={form.mission}
+                        onChange={e => setForm({ ...form, mission: e.target.value })}
+                        placeholder="Club's immediate mission..."
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Contact Email</Label>
+                    <Input value={form.contactEmail} onChange={e => setForm({ ...form, contactEmail: e.target.value })} placeholder="club@college.edu" />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Contact Phone</Label>
+                    <Input value={form.contactPhone} onChange={e => setForm({ ...form, contactPhone: e.target.value })} placeholder="+91 1234567890" />
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
@@ -487,6 +582,33 @@ function ClubProfileEditor({ club }: { club: any }) {
                 </div>
             </div>
 
+            <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Gallery Images (URLs)</Label>
+                <div className="space-y-2">
+                    {form.gallery.map((url: string, index: number) => (
+                        <div key={index} className="flex gap-2">
+                            <Input
+                                value={url}
+                                onChange={e => {
+                                    const newGallery = [...form.gallery];
+                                    newGallery[index] = e.target.value;
+                                    setForm({ ...form, gallery: newGallery });
+                                }}
+                            />
+                            <Button variant="ghost" size="icon" onClick={() => {
+                                const newGallery = form.gallery.filter((_: string, i: number) => i !== index);
+                                setForm({ ...form, gallery: newGallery });
+                            }}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button variant="outline" size="sm" className="w-full border-dashed" onClick={() => setForm({ ...form, gallery: [...form.gallery, ''] })}>
+                        <Plus className="h-4 w-4 mr-2" /> Add Image URL
+                    </Button>
+                </div>
+            </div>
+
             <div className="flex justify-end gap-3 pt-4 border-t">
                 <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
                 <Button
@@ -494,6 +616,12 @@ function ClubProfileEditor({ club }: { club: any }) {
                         description: form.description,
                         logo: form.logo,
                         banner: form.banner,
+                        tagline: form.tagline,
+                        vision: form.vision,
+                        mission: form.mission,
+                        contactEmail: form.contactEmail,
+                        contactPhone: form.contactPhone,
+                        gallery: form.gallery.filter((url: string) => url.trim() !== ''),
                         socialLinks: {
                             instagram: form.instagram,
                             linkedin: form.linkedin,
@@ -512,15 +640,39 @@ function ClubAchievementsManager({ clubId, achievements = [] }: { clubId: string
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [isOpen, setIsOpen] = useState(false);
-    const [newItem, setNewItem] = useState({ title: '', description: '', earnedAt: '' });
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [newItem, setNewItem] = useState({
+        title: '',
+        description: '',
+        earnedAt: '',
+        location: '',
+        rank: '',
+        driveLink: '',
+        prize: '',
+        chiefGuestName: '',
+        chiefGuestDesignation: ''
+    });
 
     const addMutation = useMutation({
-        mutationFn: (data: any) => api.addClubAchievement(clubId, data),
+        mutationFn: (data: any) => editingId
+            ? api.updateClubAchievement(clubId, editingId, data)
+            : api.addClubAchievement(clubId, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['club-management'] });
-            toast({ title: 'Achievement Added' });
+            toast({ title: editingId ? 'Achievement Updated' : 'Achievement Added' });
             setIsOpen(false);
-            setNewItem({ title: '', description: '', earnedAt: '' });
+            setEditingId(null);
+            setNewItem({
+                title: '',
+                description: '',
+                earnedAt: '',
+                location: '',
+                rank: '',
+                driveLink: '',
+                prize: '',
+                chiefGuestName: '',
+                chiefGuestDesignation: ''
+            });
         }
     });
 
@@ -532,6 +684,22 @@ function ClubAchievementsManager({ clubId, achievements = [] }: { clubId: string
         }
     });
 
+    const handleEdit = (item: any) => {
+        setEditingId(item._id);
+        setNewItem({
+            title: item.title || '',
+            description: item.description || '',
+            earnedAt: item.earnedAt ? new Date(item.earnedAt).toISOString().split('T')[0] : '',
+            location: item.location || '',
+            rank: item.rank || '',
+            driveLink: item.driveLink || '',
+            prize: item.winners?.[0]?.prize || '',
+            chiefGuestName: item.chiefGuests?.[0]?.name || '',
+            chiefGuestDesignation: item.chiefGuests?.[0]?.designation || ''
+        });
+        setIsOpen(true);
+    };
+
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -539,26 +707,81 @@ function ClubAchievementsManager({ clubId, achievements = [] }: { clubId: string
                     <CardTitle>Achievements</CardTitle>
                     <CardDescription>Awards and recognition</CardDescription>
                 </div>
-                <Dialog open={isOpen} onOpenChange={setIsOpen}>
+                <Dialog open={isOpen} onOpenChange={(v) => {
+                    setIsOpen(v);
+                    if (!v) {
+                        setEditingId(null);
+                        setNewItem({ title: '', description: '', earnedAt: '', location: '', rank: '', driveLink: '', prize: '', chiefGuestName: '', chiefGuestDesignation: '' });
+                    }
+                }}>
                     <DialogTrigger asChild>
                         <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-1" /> Add</Button>
                     </DialogTrigger>
                     <DialogContent>
-                        <DialogHeader><DialogTitle>Add Achievement</DialogTitle></DialogHeader>
-                        <div className="space-y-3">
+                        <DialogHeader><DialogTitle>{editingId ? 'Edit Achievement' : 'Add Achievement'}</DialogTitle></DialogHeader>
+                        <div className="space-y-3 max-h-[70vh] overflow-y-auto px-1">
                             <div>
-                                <Label>Title</Label>
-                                <Input value={newItem.title} onChange={e => setNewItem({ ...newItem, title: e.target.value })} />
+                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Title</Label>
+                                <Input value={newItem.title} onChange={e => setNewItem({ ...newItem, title: e.target.value })} placeholder="e.g. 1st Place at TechFest" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Date Earned</Label>
+                                    <Input type="date" value={newItem.earnedAt} onChange={e => setNewItem({ ...newItem, earnedAt: e.target.value })} />
+                                </div>
+                                <div>
+                                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Rank/Position</Label>
+                                    <Input value={newItem.rank} onChange={e => setNewItem({ ...newItem, rank: e.target.value })} placeholder="e.g. 1st" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Location</Label>
+                                    <Input value={newItem.location} onChange={e => setNewItem({ ...newItem, location: e.target.value })} placeholder="e.g. IIT Bombay" />
+                                </div>
+                                <div>
+                                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Prize</Label>
+                                    <Input value={newItem.prize} onChange={e => setNewItem({ ...newItem, prize: e.target.value })} placeholder="e.g. ₹50,000" />
+                                </div>
                             </div>
                             <div>
-                                <Label>Date Earned</Label>
-                                <Input type="date" value={newItem.earnedAt} onChange={e => setNewItem({ ...newItem, earnedAt: e.target.value })} />
+                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Chief Guest (Optional)</Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Input value={newItem.chiefGuestName} onChange={e => setNewItem({ ...newItem, chiefGuestName: e.target.value })} placeholder="Name" />
+                                    <Input value={newItem.chiefGuestDesignation} onChange={e => setNewItem({ ...newItem, chiefGuestDesignation: e.target.value })} placeholder="Designation" />
+                                </div>
                             </div>
                             <div>
-                                <Label>Description</Label>
-                                <textarea className="w-full border rounded p-2" value={newItem.description} onChange={e => setNewItem({ ...newItem, description: e.target.value })} />
+                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Photos Drive Link</Label>
+                                <Input value={newItem.driveLink} onChange={e => setNewItem({ ...newItem, driveLink: e.target.value })} placeholder="https://drive.google.com/..." />
                             </div>
-                            <Button className="w-full" onClick={() => addMutation.mutate(newItem)}>Save Achievement</Button>
+                            <div>
+                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Description</Label>
+                                <textarea
+                                    className="w-full border rounded-xl p-3 text-sm min-h-[100px] focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                                    value={newItem.description}
+                                    onChange={e => setNewItem({ ...newItem, description: e.target.value })}
+                                    placeholder="Briefly describe the achievement..."
+                                />
+                            </div>
+                            <Button
+                                className="w-full h-11 rounded-xl font-bold shadow-lg shadow-primary/20"
+                                onClick={() => {
+                                    const payload = {
+                                        title: newItem.title,
+                                        description: newItem.description,
+                                        earnedAt: newItem.earnedAt,
+                                        location: newItem.location,
+                                        rank: newItem.rank,
+                                        driveLink: newItem.driveLink,
+                                        chiefGuests: newItem.chiefGuestName ? [{ name: newItem.chiefGuestName, designation: newItem.chiefGuestDesignation }] : [],
+                                        winners: newItem.prize ? [{ name: 'Club Team', position: newItem.rank || 'Winner', prize: newItem.prize }] : []
+                                    };
+                                    addMutation.mutate(payload);
+                                }}
+                            >
+                                Save Achievement
+                            </Button>
                         </div>
                     </DialogContent>
                 </Dialog>
@@ -577,9 +800,14 @@ function ClubAchievementsManager({ clubId, achievements = [] }: { clubId: string
                                         <p className="text-xs text-muted-foreground">{item.description}</p>
                                     </div>
                                 </div>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => deleteMutation.mutate(item._id)}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleEdit(item)}>
+                                        <Shield className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => deleteMutation.mutate(item._id)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         ))}
                 </div>
@@ -708,8 +936,8 @@ function ManageClubMembers({ clubId, pendingMembers, canManage, onPromote, users
 function ManageCoreTeam({ club, canManage, isImpersonating, onManage, onAssignWork }: { club: any; canManage?: boolean; isImpersonating?: boolean; onManage?: (tab?: string) => void; onAssignWork?: () => void }) {
     const coreTeam = club.coreTeam || [];
     const coordinators = coreTeam.filter((m: any) => m.role === 'club_coordinator');
-    const secretaries = coreTeam.filter((m: any) => m.role === 'club_head' || m.role === 'club_co_coordinator');
-    const regularCore = coreTeam.filter((m: any) => m.role !== 'club_head' && m.role !== 'club_co_coordinator' && m.role !== 'club_coordinator');
+    const secretaries = coreTeam.filter((m: any) => m.role === 'club_head');
+    const regularCore = coreTeam.filter((m: any) => m.role !== 'club_head' && m.role !== 'club_coordinator');
 
     return (
         <div className="space-y-6">
@@ -821,7 +1049,7 @@ function ManageCoreTeam({ club, canManage, isImpersonating, onManage, onAssignWo
                                             <div>
                                                 <p className="font-black text-blue-950 text-lg uppercase tracking-tight">{member.name}</p>
                                                 <div className="flex items-center gap-2 mt-0.5">
-                                                    <Badge className="bg-blue-600 hover:bg-blue-600 font-bold uppercase text-[9px] tracking-widest">{member.role}</Badge>
+                                                    <Badge className="bg-blue-600 hover:bg-blue-600 font-bold uppercase text-[9px] tracking-widest">{getRoleLabel(member.role)}</Badge>
                                                     {member.customTitle && <Badge variant="secondary" className="text-[10px] font-bold border-blue-200 text-blue-800">{member.customTitle}</Badge>}
                                                 </div>
                                             </div>
@@ -870,7 +1098,7 @@ function ManageCoreTeam({ club, canManage, isImpersonating, onManage, onAssignWo
                                         <div className="min-w-0">
                                             <p className="font-bold text-slate-900 truncate">{member.name}</p>
                                             <div className="flex items-center gap-2 mt-0.5">
-                                                <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider">{member.role}</Badge>
+                                                <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider">{getRoleLabel(member.role)}</Badge>
                                                 {member.customTitle && <Badge variant="secondary" className="text-[9px] font-medium truncate max-w-[100px]">{member.customTitle}</Badge>}
                                             </div>
                                         </div>
@@ -896,6 +1124,7 @@ function ClubPollCreator({ clubId }: { clubId: string }) {
     const queryClient = useQueryClient();
     const [question, setQuestion] = useState('');
     const [options, setOptions] = useState(['', '']);
+    const [duration, setDuration] = useState<string>('24'); // Default 24 hours
 
     const createPollMutation = useMutation({
         mutationFn: (data: any) => api.createPoll(data),
@@ -908,7 +1137,16 @@ function ClubPollCreator({ clubId }: { clubId: string }) {
 
     const handleSubmit = (e: any) => {
         e.preventDefault();
-        createPollMutation.mutate({ question, options: options.filter(o => o), clubId, createdBy: user?.id });
+        const hours = parseInt(duration);
+        const expiresAt = hours > 0 ? new Date(Date.now() + hours * 60 * 60 * 1000).toISOString() : null;
+
+        createPollMutation.mutate({
+            question,
+            options: options.filter(o => o),
+            clubId,
+            createdBy: user?.id,
+            expiresAt
+        });
     };
 
     return (
@@ -916,17 +1154,38 @@ function ClubPollCreator({ clubId }: { clubId: string }) {
             <CardHeader><CardTitle className="text-base">Create Poll</CardTitle></CardHeader>
             <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <Input value={question} onChange={e => setQuestion(e.target.value)} placeholder="Question" required />
-                    {options.map((opt, i) => (
-                        <Input key={i} value={opt} onChange={e => {
-                            const n = [...options]; n[i] = e.target.value; setOptions(n);
-                        }} placeholder={`Option ${i + 1}`} required />
-                    ))}
-                    <div className="flex gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => setOptions([...options, ''])}>
-                            <Plus className="h-4 w-4 mr-2" /> Add Option
-                        </Button>
+                    <div className="grid gap-2">
+                        <Label htmlFor="question">Poll Question</Label>
+                        <Input id="question" value={question} onChange={e => setQuestion(e.target.value)} placeholder="e.g., When should we meet?" required />
                     </div>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="duration">Duration</Label>
+                        <div className="flex items-center gap-2">
+                            <Input
+                                id="duration"
+                                type="number"
+                                min="1"
+                                value={duration}
+                                onChange={e => setDuration(e.target.value)}
+                                className="w-24"
+                            />
+                            <span className="text-sm text-muted-foreground">hours</span>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Options</Label>
+                        {options.map((opt, i) => (
+                            <Input key={i} value={opt} onChange={e => {
+                                const n = [...options]; n[i] = e.target.value; setOptions(n);
+                            }} placeholder={`Option ${i + 1}`} required />
+                        ))}
+                    </div>
+
+                    <Button type="button" variant="outline" size="sm" onClick={() => setOptions([...options, ''])}>
+                        <Plus className="h-4 w-4 mr-2" /> Add Option
+                    </Button>
                     <Button type="submit" className="w-full">Create Poll</Button>
                 </form>
             </CardContent>
@@ -971,9 +1230,22 @@ function PollCountdown({ expiresAt }: { expiresAt: string }) {
 
 function ClubPollsList({ clubId, status }: { clubId: string, status?: string }) {
     const { user } = useAuth();
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+    const [extendPollId, setExtendPollId] = useState<string | null>(null);
+    const [currentExpiry, setCurrentExpiry] = useState<string | null>(null);
+
     const { data: polls = [], isLoading } = useQuery({
         queryKey: ['club-polls', clubId, status],
         queryFn: () => api.getPolls(user?.id, user?.role, user?.email, clubId, undefined, status)
+    });
+
+    const closePollMutation = useMutation({
+        mutationFn: (pollId: string) => api.updatePollStatus(pollId, 'closed'),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['club-polls', clubId] });
+            toast({ title: "Poll Ended" });
+        }
     });
 
     if (isLoading) return <div className="flex justify-center py-10"><Loader2 className="animate-spin text-primary" /></div>;
@@ -1002,11 +1274,43 @@ function ClubPollsList({ clubId, status }: { clubId: string, status?: string }) 
                                             <Badge variant={p.status === 'active' ? 'default' : 'secondary'} className="text-[10px] h-5 px-1.5 font-bold">
                                                 {(p.expiresAt && new Date() >= new Date(p.expiresAt)) ? 'EXPIRED' : (p.status?.toUpperCase() || 'ACTIVE')}
                                             </Badge>
-                                            {p.expiresAt && p.status === 'active' && <PollCountdown expiresAt={p.expiresAt} />}
+                                            {p.expiresAt && p.status === 'active' ? (
+                                                <PollCountdown expiresAt={p.expiresAt} />
+                                            ) : (
+                                                p.status === 'active' && <span className="text-[10px] text-amber-500 font-bold flex items-center gap-1"><Clock className="h-3 w-3" /> No Timer Set</span>
+                                            )}
                                             <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                                 <Users className="h-3 w-3" />
                                                 {totalVotes} Total Votes
                                             </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-dashed">
+                                            <span className="text-[10px] uppercase font-bold text-muted-foreground mr-auto text-[10px]">Manage:</span>
+
+                                            {p.status === 'active' && !(p.expiresAt && new Date() >= new Date(p.expiresAt)) ? (
+                                                <>
+                                                    <Button size="sm" variant="outline" className="h-7 text-xs px-2 gap-1 border-primary text-primary hover:bg-primary/5"
+                                                        onClick={() => {
+                                                            setExtendPollId(p._id);
+                                                            setCurrentExpiry(p.expiresAt);
+                                                        }}>
+                                                        <Clock className="h-3 w-3" /> {p.expiresAt ? 'Extend / Reduce' : 'Set Timer'}
+                                                    </Button>
+
+                                                    <Button size="sm" variant="destructive" className="h-7 text-xs px-2 gap-1"
+                                                        onClick={() => { if (confirm("Are you sure you want to end this poll now?")) closePollMutation.mutate(p._id); }}>
+                                                        <Square className="h-3 w-3 fill-current" /> End
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <Button size="sm" variant="outline" className="h-7 text-xs px-3 gap-1 border-primary text-primary hover:bg-primary/5 font-bold"
+                                                    onClick={() => {
+                                                        setExtendPollId(p._id);
+                                                        setCurrentExpiry(p.expiresAt);
+                                                    }}>
+                                                    <Plus className="h-3 w-3" /> Restart Poll
+                                                </Button>
+                                            )}
                                         </div>
                                         <p className="font-bold text-base leading-tight mt-1">{p.question}</p>
                                     </div>
@@ -1032,58 +1336,150 @@ function ClubPollsList({ clubId, status }: { clubId: string, status?: string }) 
                     );
                 })
             )}
+
+            {extendPollId && (
+                <ExtendPollDialog
+                    open={!!extendPollId}
+                    onClose={() => setExtendPollId(null)}
+                    pollId={extendPollId}
+                    currentExpiry={currentExpiry}
+                    clubId={clubId}
+                />
+            )}
         </div>
     );
 }
 
 function ClubBroadcasts({ clubId, clubName }: { clubId: string; clubName: string }) {
     const { toast } = useToast();
+    const { user } = useAuth();
     const [title, setTitle] = useState('');
     const [message, setMessage] = useState('');
+
+    const { data: history = [], isLoading, refetch } = useQuery({
+        queryKey: ['club-notifications', clubId],
+        queryFn: () => api.getNotifications(undefined, undefined, clubId, undefined, 'club_broadcast'), // Filter by type
+        enabled: !!clubId
+    });
 
     const sendMutation = useMutation({
         mutationFn: (data: any) => api.sendNotification(data),
         onSuccess: () => {
-            toast({ title: 'Broadcast Sent' });
+            toast({ title: 'Broadcast Sent', description: 'Notification delivered to all members.' });
             setTitle('');
             setMessage('');
+            refetch(); // Refresh history
+        },
+        onError: (err: any) => {
+            toast({
+                title: 'Broadcast Failed',
+                description: err.response?.data?.message || 'Could not send notification',
+                variant: 'destructive'
+            });
         }
     });
 
     const handleSend = (e: any) => {
         e.preventDefault();
+
+        if (!clubId) {
+            toast({ title: 'Error', description: 'Club ID is missing. Cannot send.', variant: 'destructive' });
+            return;
+        }
+
+        console.log('Sending broadcast:', { clubId, userId: user?.id, title, message });
+
         sendMutation.mutate({
             recipient: clubId,
             type: 'club_broadcast',
-            sender: 'Club Coordinator',
+            senderId: user?.id,
             title: `[${clubName}] ${title}`,
             message: message,
-            relatedId: clubId
+            relatedId: clubId,
+            isManualBroadcast: true
         });
     };
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Send Club Broadcast</CardTitle>
-                <p className="text-sm text-muted-foreground">Notify all members of updates</p>
-            </CardHeader>
-            <CardContent>
-                <form onSubmit={handleSend} className="space-y-4">
-                    <Input placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} required />
-                    <textarea
-                        className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        placeholder="Message..."
-                        value={message}
-                        onChange={e => setMessage(e.target.value)}
-                        required
-                    />
-                    <Button type="submit" disabled={sendMutation.isPending}>
-                        <Megaphone className="h-4 w-4 mr-2" /> Send Broadcast
-                    </Button>
-                </form>
-            </CardContent>
-        </Card>
+        <div className="space-y-6" >
+            <Card>
+                <CardHeader>
+                    <CardTitle>Send Club Broadcast</CardTitle>
+                    <p className="text-sm text-muted-foreground">Notify all members of updates</p>
+                    <div className="text-[10px] text-muted-foreground font-mono bg-slate-100 p-1 rounded">
+                        DEBUG: ClubID: {clubId || 'MISSING'} | UserID: {user?.id || 'MISSING'}
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSend} className="space-y-4">
+                        <Input placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} required />
+                        <textarea
+                            className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            placeholder="Message..."
+                            value={message}
+                            onChange={e => setMessage(e.target.value)}
+                            required
+                        />
+                        <Button type="submit" disabled={sendMutation.isPending || !clubId}>
+                            <Megaphone className="h-4 w-4 mr-2" />
+                            {sendMutation.isPending ? 'Sending...' : 'Send Broadcast'}
+                        </Button>
+                    </form>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                        <History className="h-5 w-5" /> Broadcast History
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-4">
+                        {isLoading ? (
+                            <div className="flex justify-center py-4"><Loader2 className="animate-spin" /></div>
+                        ) : history.length === 0 ? (
+                            <p className="text-muted-foreground text-center py-4">No broadcast history found.</p>
+                        ) : (
+                            history.map((msg: any) => (
+                                <div key={msg._id} className="p-4 border rounded-lg bg-secondary/10">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h4 className="font-bold">{msg.title}</h4>
+                                        <span className="text-xs text-muted-foreground">
+                                            {new Date(msg.createdAt).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <ExpandableText text={msg.message} />
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+        </div >
+    );
+}
+
+function ExpandableText({ text }: { text: string }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const limit = 200;
+
+    if (!text || text.length <= limit) {
+        return <p className="text-sm text-muted-foreground whitespace-pre-wrap">{text}</p>;
+    }
+
+    return (
+        <div>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {isExpanded ? text : `${text.substring(0, limit)}...`}
+            </p>
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-xs font-bold text-primary mt-2 hover:underline focus:outline-none"
+            >
+                {isExpanded ? 'READ LESS' : 'READ MORE'}
+            </button>
+        </div>
     );
 }
 
@@ -1246,7 +1642,7 @@ function ClubLeaderboard({ clubId }: { clubId: string }) {
                                     </div>
                                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                         <Badge variant="outline" className="text-[9px] font-medium uppercase">
-                                            {member.role?.replace(/_/g, ' ')}
+                                            {getRoleLabel(member.role || '')}
                                         </Badge>
                                         {member.level && (
                                             <span className="text-[10px] text-muted-foreground font-medium">

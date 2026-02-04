@@ -101,9 +101,7 @@ export function NotificationBell() {
                                                     {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-muted-foreground line-clamp-2">
-                                                {notification.message}
-                                            </p>
+                                            <ExpandableText text={notification.message} />
                                             {!isRead && (
                                                 <button
                                                     onClick={() => handleMarkRead(notification._id || notification.id)}
@@ -125,5 +123,31 @@ export function NotificationBell() {
                 </ScrollArea>
             </PopoverContent>
         </Popover>
+    );
+}
+
+function ExpandableText({ text }: { text: string }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const limit = 60; // Shorter limit for dropdown
+
+    if (!text || text.length <= limit) {
+        return <p className="text-xs text-muted-foreground whitespace-pre-wrap">{text}</p>;
+    }
+
+    return (
+        <div>
+            <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                {isExpanded ? text : `${text.substring(0, limit)}...`}
+            </p>
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    setIsExpanded(!isExpanded);
+                }}
+                className="text-[10px] font-bold text-primary mt-1 hover:underline focus:outline-none"
+            >
+                {isExpanded ? 'Read Less' : 'Read More'}
+            </button>
+        </div>
     );
 }

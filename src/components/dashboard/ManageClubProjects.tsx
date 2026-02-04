@@ -29,22 +29,19 @@ import {
     Calendar,
     Target,
     ArrowRight,
-    CircleDashed,
     UserCircle,
     Bell,
     Send,
     Loader2,
     Check,
-    X,
     Ban,
     FileText,
     Pause,
     Play,
     Trash2,
-    Trophy,
-    Zap
+    Trophy
 } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 interface ManageClubProjectsProps {
     clubId: string;
@@ -64,12 +61,12 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
     // Awarding State
     const [isAwardOpen, setIsAwardOpen] = useState(false);
     const [selectedAwardProject, setSelectedAwardProject] = useState<any>(null);
-    const [selectedMemberForAward, setSelectedMemberForAward] = useState("");
-    const [awardData, setAwardData] = useState({ badgeName: "", badgeDesc: "For outstanding contribution", skillName: "" });
+    const [selectedMemberForAward] = useState("all");
+    const [awardData, setAwardData] = useState({ badgeName: "", badgeDesc: "For outstanding contribution" });
 
     const { data: projects = [], isLoading } = useQuery({
-        queryKey: ['club-projects', clubId],
-        queryFn: () => api.getProjects(undefined, clubId)
+        queryKey: ['club-projects', clubId, currentUser?.id],
+        queryFn: () => api.getProjects(undefined, clubId, undefined, currentUser?.id)
     });
 
     const approveMutation = useMutation({
@@ -156,33 +153,44 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
     });
 
     const awardBadgeMutation = useMutation({
-        mutationFn: () => api.awardUserBadge(selectedMemberForAward, {
-            name: awardData.badgeName,
-            description: awardData.badgeDesc,
-            icon: 'award' // Default icon
-        }),
+        mutationFn: async () => {
+            const badge = {
+                name: awardData.badgeName,
+                description: awardData.badgeDesc,
+                icon: 'award'
+            };
+
+            if (selectedMemberForAward === 'all') {
+                const userIds = selectedAwardProject?.team?.map((m: any) =>
+                    typeof m === 'string' ? m : (m.id || m._id)
+                ) || [];
+                return api.awardBadgeBatch(userIds, badge);
+            } else {
+                return api.awardUserBadge(selectedMemberForAward, badge);
+            }
+        },
         onSuccess: () => {
-            toast({ title: "Badge Awarded!", description: "User profile has been updated." });
+            toast({
+                title: "Badge Awarded!",
+                description: selectedMemberForAward === 'all'
+                    ? "Team-wide honors dispersed."
+                    : "User profile has been updated."
+            });
             setAwardData({ ...awardData, badgeName: "" });
+            setIsAwardOpen(false);
         },
         onError: (err: any) => {
             toast({ title: "Award Failed", description: err.message, variant: "destructive" });
         }
     });
 
-    const awardSkillMutation = useMutation({
-        mutationFn: () => api.awardUserSkill(selectedMemberForAward, awardData.skillName),
-        onSuccess: () => {
-            toast({ title: "Skill Endorsed!", description: "Skill added to user profile." });
-            setAwardData({ ...awardData, skillName: "" });
-        },
-        onError: (err: any) => {
-            toast({ title: "Endorsement Failed", description: err.message, variant: "destructive" });
-        }
-    });
 
-    const getMemberDetails = (memberId: string) => {
-        return allUsers.find(u => u.id === memberId || u._id === memberId);
+
+    const getMemberDetails = (memberOrId: any) => {
+        if (!memberOrId) return null;
+        if (typeof memberOrId === 'object' && (memberOrId.name || memberOrId.avatar)) return memberOrId;
+        const id = typeof memberOrId === 'object' ? (memberOrId.id || memberOrId._id) : memberOrId;
+        return allUsers.find(u => u.id === id || u._id === id) || (typeof memberOrId === 'object' ? memberOrId : null);
     };
 
     const handleOpenNotify = (project: any) => {
@@ -281,8 +289,9 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
                         <p className="text-[10px] text-muted-foreground">Max {project.memberLimit || 4}</p>
                     </div>
                     <div className="flex -space-x-2 overflow-hidden py-1">
-                        {project.team?.slice(0, 5).map((memberId: string) => {
-                            const member = getMemberDetails(memberId);
+                        {project.team?.slice(0, 5).map((memberData: any) => {
+                            const member = getMemberDetails(memberData);
+                            const memberId = member?._id || member?.id || (typeof memberData === 'string' ? memberData : Math.random().toString());
                             return (
                                 <Avatar key={memberId} className="h-7 w-7 border-2 border-background ring-0">
                                     <AvatarImage src={member?.avatar} title={member?.name} />
@@ -584,11 +593,12 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
                                 Team Members ({selectedProject?.team?.length || 0})
                             </h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {selectedProject?.team?.map((memberId: string) => {
-                                    const member = getMemberDetails(memberId);
-                                    const isLeader = selectedProject.requestedBy === memberId;
+                                {selectedProject?.team?.map((memberData: any) => {
+                                    const member = getMemberDetails(memberData);
+                                    const memberId = member?._id || member?.id;
+                                    const isLeader = (selectedProject.requestedBy?._id || selectedProject.requestedBy) === memberId;
                                     return (
-                                        <div key={memberId} className="flex items-center gap-3 p-2 rounded-md hover:bg-secondary/10 transition-colors border group">
+                                        <div key={memberId || Math.random().toString()} className="flex items-center gap-3 p-2 rounded-md hover:bg-secondary/10 transition-colors border group">
                                             <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
                                                 <AvatarImage src={member?.avatar} />
                                                 <AvatarFallback className="bg-primary/5 text-primary text-xs">
@@ -614,7 +624,7 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
                     </div>
 
                     <DialogFooter className="gap-2 sm:gap-0 sm:justify-between border-t pt-4">
-                        <Button variant="ghost" className="hidden sm:inline-flex" onClick={() => setIsDetailsOpen(false)}>
+                        <Button variant="ghost" onClick={() => setIsDetailsOpen(false)}>
                             Close
                         </Button>
                         <div className="flex gap-2 w-full sm:w-auto">
@@ -645,40 +655,39 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
                                 </>
                             ) : (
                                 <>
-                                    <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                                        <Button variant="outline" className="hidden sm:inline-flex" onClick={() => setIsDetailsOpen(false)}>
-                                            Back to List
-                                        </Button>
-
+                                    <div className="flex gap-1.5 items-center">
                                         {selectedProject?.status === 'on_hold' ? (
                                             <Button
                                                 variant="outline"
-                                                className="flex-1 sm:flex-none bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200"
+                                                size="sm"
+                                                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200 h-8 text-xs px-2"
                                                 onClick={() => {
                                                     resumeMutation.mutate(selectedProject._id || selectedProject.id);
                                                     setIsDetailsOpen(false);
                                                 }}
                                                 disabled={resumeMutation.isPending}
                                             >
-                                                <Play className="h-4 w-4 mr-2" /> Resume
+                                                <Play className="h-3.5 w-3.5 mr-1" /> Resume
                                             </Button>
                                         ) : (
                                             <Button
                                                 variant="outline"
-                                                className="flex-1 sm:flex-none bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-200"
+                                                size="sm"
+                                                className="bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-200 h-8 text-xs px-2"
                                                 onClick={() => {
                                                     onHoldMutation.mutate(selectedProject._id || selectedProject.id);
                                                     setIsDetailsOpen(false);
                                                 }}
                                                 disabled={onHoldMutation.isPending || selectedProject?.status === 'completed' || selectedProject?.status === 'rejected'}
                                             >
-                                                <Pause className="h-4 w-4 mr-2" /> Pause
+                                                <Pause className="h-3.5 w-3.5 mr-1" /> Pause
                                             </Button>
                                         )}
 
                                         <Button
                                             variant="destructive"
-                                            className="flex-1 sm:flex-none"
+                                            size="sm"
+                                            className="h-8 text-xs px-2"
                                             onClick={() => {
                                                 if (confirm("Are you sure you want to permanently delete this project? This action cannot be undone.")) {
                                                     deleteMutation.mutate(selectedProject._id || selectedProject.id);
@@ -687,19 +696,25 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
                                             }}
                                             disabled={deleteMutation.isPending}
                                         >
-                                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
                                         </Button>
 
-                                        <Button className="flex-1 sm:flex-none gap-2" onClick={() => {
-                                            setIsDetailsOpen(false);
-                                            handleOpenNotify(selectedProject);
-                                        }} disabled={selectedProject?.status === 'rejected'}>
-                                            <Bell className="h-4 w-4" /> Notify Team
+                                        <Button
+                                            size="sm"
+                                            className="gap-1 h-8 text-xs px-2"
+                                            onClick={() => {
+                                                setIsDetailsOpen(false);
+                                                handleOpenNotify(selectedProject);
+                                            }}
+                                            disabled={selectedProject?.status === 'rejected'}
+                                        >
+                                            <Bell className="h-3.5 w-3.5" /> Notify Team
                                         </Button>
 
                                         <Button
                                             variant="secondary"
-                                            className="flex-1 sm:flex-none gap-2 bg-purple-100 text-purple-700 hover:bg-purple-200"
+                                            size="sm"
+                                            className="gap-1 bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 border h-8 text-xs px-2"
                                             onClick={() => {
                                                 setIsDetailsOpen(false);
                                                 setIsAwardOpen(true);
@@ -707,7 +722,7 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
                                             }}
                                             disabled={!['completed', 'approved', 'in_progress'].includes(selectedProject?.status)}
                                         >
-                                            <Trophy className="h-4 w-4" /> Award Recognition
+                                            <Trophy className="h-3.5 w-3.5" /> Award Recognition
                                         </Button>
                                     </div>
                                 </>
@@ -726,85 +741,37 @@ export function ManageClubProjects({ clubId, allUsers }: ManageClubProjectsProps
                             Award Recognition
                         </DialogTitle>
                         <DialogDescription>
-                            Recognize team members of <strong>{selectedAwardProject?.title}</strong> with badges or skills.
+                            Award a badge to the **entire team** of <strong>{selectedAwardProject?.title}</strong>.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 py-4">
+
+
+                    <div className="space-y-4 pt-2">
                         <div className="space-y-2">
-                            <Label>Select Member</Label>
-                            <Select
-                                value={selectedMemberForAward}
-                                onValueChange={setSelectedMemberForAward}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Choose a member..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {selectedAwardProject?.team?.map((memberId: string) => {
-                                        const member = getMemberDetails(memberId);
-                                        return (
-                                            <SelectItem key={memberId} value={memberId}>
-                                                {member?.name || 'Unknown'} ({member?.role})
-                                            </SelectItem>
-                                        );
-                                    })}
-                                </SelectContent>
-                            </Select>
+                            <Label>Badge Name</Label>
+                            <Input
+                                placeholder="e.g. Top Performer, Bug Basher"
+                                value={awardData.badgeName}
+                                onChange={e => setAwardData({ ...awardData, badgeName: e.target.value })}
+                            />
                         </div>
-
-                        <Tabs defaultValue="badge" className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="badge">Award Badge</TabsTrigger>
-                                <TabsTrigger value="skill">Endorse Skill</TabsTrigger>
-                            </TabsList>
-
-                            <TabsContent value="badge" className="space-y-4 pt-4">
-                                <div className="space-y-2">
-                                    <Label>Badge Name</Label>
-                                    <Input
-                                        placeholder="e.g. Top Performer, Bug Basher"
-                                        value={awardData.badgeName}
-                                        onChange={e => setAwardData({ ...awardData, badgeName: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Description</Label>
-                                    <Input
-                                        placeholder="Reason for awarding..."
-                                        value={awardData.badgeDesc}
-                                        onChange={e => setAwardData({ ...awardData, badgeDesc: e.target.value })}
-                                    />
-                                </div>
-                                <Button
-                                    onClick={() => awardBadgeMutation.mutate()}
-                                    className="w-full bg-purple-600 hover:bg-purple-700"
-                                    disabled={!selectedMemberForAward || !awardData.badgeName || awardBadgeMutation.isPending}
-                                >
-                                    {awardBadgeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trophy className="h-4 w-4 mr-2" />}
-                                    Award Badge
-                                </Button>
-                            </TabsContent>
-
-                            <TabsContent value="skill" className="space-y-4 pt-4">
-                                <div className="space-y-2">
-                                    <Label>Technical Skill</Label>
-                                    <Input
-                                        placeholder="e.g. React, Python, Leadership"
-                                        value={awardData.skillName}
-                                        onChange={e => setAwardData({ ...awardData, skillName: e.target.value })}
-                                    />
-                                </div>
-                                <Button
-                                    onClick={() => awardSkillMutation.mutate()}
-                                    className="w-full bg-blue-600 hover:bg-blue-700"
-                                    disabled={!selectedMemberForAward || !awardData.skillName || awardSkillMutation.isPending}
-                                >
-                                    {awardSkillMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
-                                    Endorse Skill
-                                </Button>
-                            </TabsContent>
-                        </Tabs>
+                        <div className="space-y-2">
+                            <Label>Description</Label>
+                            <Input
+                                placeholder="Reason for awarding..."
+                                value={awardData.badgeDesc}
+                                onChange={e => setAwardData({ ...awardData, badgeDesc: e.target.value })}
+                            />
+                        </div>
+                        <Button
+                            onClick={() => awardBadgeMutation.mutate()}
+                            className="w-full bg-purple-600 hover:bg-purple-700 h-12 font-bold uppercase tracking-widest mt-2"
+                            disabled={!selectedMemberForAward || !awardData.badgeName || awardBadgeMutation.isPending}
+                        >
+                            {awardBadgeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trophy className="h-4 w-4 mr-2" />}
+                            {selectedMemberForAward === 'all' ? 'Award Entire Team' : 'Award Badge'}
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>

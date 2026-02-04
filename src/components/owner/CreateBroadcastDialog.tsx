@@ -20,10 +20,9 @@ import { useAuth } from '@/contexts/AuthContext';
 interface CreateBroadcastDialogProps {
     open: boolean;
     onClose: () => void;
-    collegeName: string;
 }
 
-export function CreateBroadcastDialog({ open, onClose, collegeName }: CreateBroadcastDialogProps) {
+export function CreateBroadcastDialog({ open, onClose }: CreateBroadcastDialogProps) {
     const [title, setTitle] = useState('');
     const [message, setMessage] = useState('');
     const [type, setType] = useState('info');
@@ -35,7 +34,7 @@ export function CreateBroadcastDialog({ open, onClose, collegeName }: CreateBroa
     const sendNotificationMutation = useMutation({
         mutationFn: (data: any) => api.sendNotification(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            queryClient.invalidateQueries({ queryKey: ['broadcast-notifications'] });
             toast({
                 title: 'Broadcast Sent Successfully',
                 description: `Notification has been sent to ${recipient === 'all' ? 'all students' : recipient}`
