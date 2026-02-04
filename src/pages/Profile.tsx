@@ -31,7 +31,7 @@ import {
   X,
   CheckCircle2
 } from 'lucide-react';
-import { UserRole } from '@/types';
+import { User, UserRole } from '@/types';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { calculateLevelData } from '@/lib/leveling';
@@ -51,6 +51,8 @@ const roleLabels: Record<UserRole, string> = {
   admin: 'College Admin',
   owner: 'Owner',
   club_head: 'Club Head',
+  club_co_coordinator: 'Club Co-Coordinator',
+  co_admin: 'Co-Admin',
 };
 
 export default function Profile() {
@@ -129,13 +131,13 @@ export default function Profile() {
   });
 
   const updateProfileMutation = useMutation({
-    mutationFn: (data: Partial<User>) => {
+    mutationFn: (data: Omit<Partial<User>, 'skills'> & { skills?: string | string[] }) => {
       // Handle skills string to array conversion
       const processedData = {
         ...data,
         skills: typeof data.skills === 'string' ? data.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '') : data.skills
       };
-      return api.updateUser(user!.id, processedData);
+      return api.updateUser(user!.id, processedData as Partial<User>);
     },
     onSuccess: (updatedUser: User) => {
       updateUser(updatedUser);
@@ -171,7 +173,7 @@ export default function Profile() {
 
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfileMutation.mutate(formData);
+    updateProfileMutation.mutate(formData as any);
   };
 
   const handleUpdateSkills = (e: React.FormEvent) => {

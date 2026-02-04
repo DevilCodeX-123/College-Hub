@@ -329,7 +329,7 @@ export interface Ad {
   frequencyPerUser?: number;
   frequencyInterval?: number;
   maxTotalViews?: number;
-  targetingType: 'worldwide' | 'college' | 'club' | 'page';
+  targetingType: 'worldwide' | 'college' | 'club' | 'page' | 'specific_colleges';
   targetColleges?: string[];
   targetClubs?: string[];
   targetPages?: string[];

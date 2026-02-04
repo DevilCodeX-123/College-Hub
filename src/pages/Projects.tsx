@@ -696,7 +696,9 @@ export default function Projects() {
                                           handleConfirmAction(
                                             'Remove Team Member?',
                                             `Are you sure you want to extract ${mName} from this project force?`,
-                                            () => removeMemberMutation.mutate(mId)
+                                            () => {
+                                              if (mId) removeMemberMutation.mutate(mId)
+                                            }
                                           );
                                         }}
                                       >
@@ -729,7 +731,9 @@ export default function Projects() {
                                       <div className="flex flex-col md:flex-row justify-between items-start gap-6">
                                         <div className="space-y-4 flex-1 w-full">
                                           <div className="flex items-center gap-2">
-                                            <p className="text-sm font-black uppercase tracking-tight text-amber-900 px-3 py-1 rounded-full bg-amber-100/50">{req.user?.name || (typeof req.user === 'string' ? `Recruit ${req.user.slice(-4)}` : "Candidate")}</p>
+                                            <p className="text-sm font-black uppercase tracking-tight text-amber-900 px-3 py-1 rounded-full bg-amber-100/50">
+                                              {typeof req.user === 'object' && req.user ? req.user.name : (typeof req.user === 'string' ? `Recruit ${req.user.slice(-4)}` : "Candidate")}
+                                            </p>
                                             <span className="text-[10px] font-bold text-amber-500/60 uppercase tracking-widest">ENLISTMENT REQUEST</span>
                                           </div>
                                           <p className="text-xs text-slate-700 italic font-medium leading-relaxed border-l-4 border-amber-300 pl-4 py-1 bg-amber-50/30">"{req.reason || "No reason provided"}"</p>

@@ -25,7 +25,7 @@ const pageTransition = {
     type: 'tween',
     ease: 'anticipate',
     duration: 0.5
-};
+} as const;
 
 export const PageTransition = ({ children, className = '' }: PageTransitionProps) => {
     return (

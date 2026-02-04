@@ -171,13 +171,13 @@ export function AdManagement() {
                 worldwideVideoPrice: config.worldwideVideoPrice || 0,
                 qrCodeUrl: config.qrCodeUrl || '',
                 paymentWarning: config.paymentWarning || ''
-            });
+            } as any); // Cast to any or define a proper FormData interface
         }
     }, [config]);
 
     const handleCreateSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        createAdMutation.mutate(formData);
+        createAdMutation.mutate(formData as unknown as Partial<Ad>);
     };
 
     const handleSaveMonetization = async () => {
@@ -433,8 +433,8 @@ export function AdManagement() {
                                         </div>
                                     </div>
                                     <div className="text-xs text-muted-foreground mt-1 flex flex-col gap-0.5">
-                                        <span className="font-semibold text-slate-900">{ad.requestedBy?.name}</span>
-                                        <span>{ad.requestedBy?.role} • {ad.requestedBy?.college}</span>
+                                        <span className="font-semibold text-slate-900">{typeof ad.requestedBy === 'object' ? ad.requestedBy.name : 'Unknown User'}</span>
+                                        <span>{typeof ad.requestedBy === 'object' ? ad.requestedBy.role : 'Owner'} • {typeof ad.requestedBy === 'object' ? ad.requestedBy.college : 'Admin'}</span>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="p-4 pt-0 space-y-4">
@@ -443,12 +443,12 @@ export function AdManagement() {
                                     <div className="space-y-2">
                                         <div className="flex justify-between text-xs font-medium">
                                             <span>Campaign Progress</span>
-                                            <span>{Math.min(100, Math.round((ad.totalViewsCount / ad.maxTotalViews) * 100))}%</span>
+                                            <span>{Math.min(100, Math.round((ad.totalViewsCount / (ad.maxTotalViews || 1)) * 100))}%</span>
                                         </div>
                                         <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                                             <div
                                                 className={`h-full rounded-full transition-all duration-500 ${ad.isActive ? 'bg-primary' : 'bg-slate-300'}`}
-                                                style={{ width: `${Math.min(100, (ad.totalViewsCount / ad.maxTotalViews) * 100)}%` }}
+                                                style={{ width: `${Math.min(100, (ad.totalViewsCount / (ad.maxTotalViews || 1)) * 100)}%` }}
                                             />
                                         </div>
                                     </div>
@@ -639,7 +639,7 @@ export function AdManagement() {
                                                                     targetPages: ad.targetPages || ['all'],
                                                                     clickUrl: ad.clickUrl || '',
                                                                     isActive: ad.isActive
-                                                                });
+                                                                } as any);
                                                             }}
                                                         >
                                                             Edit
@@ -652,7 +652,7 @@ export function AdManagement() {
                                                         <form
                                                             onSubmit={(e) => {
                                                                 e.preventDefault();
-                                                                updateAdMutation.mutate({ id: ad._id, data: formData });
+                                                                updateAdMutation.mutate({ id: ad._id, data: formData as unknown as Partial<Ad> });
                                                             }}
                                                             className="space-y-4 py-4"
                                                         >
@@ -704,7 +704,7 @@ export function AdManagement() {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Target Reach</p>
-                                                <p className="text-sm font-semibold">{ad.maxTotalViews} Views</p>
+                                                <p className="text-sm font-semibold">{ad.maxTotalViews || 0} Views</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Scope</p>
@@ -940,9 +940,9 @@ export function AdManagement() {
                                     <div>
                                         <h2 className="text-2xl font-bold">{selectedAd.title}</h2>
                                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                            <span className="font-semibold text-primary">{selectedAd.requestedBy?.name}</span>
+                                            <span className="font-semibold text-primary">{typeof selectedAd.requestedBy === 'object' ? selectedAd.requestedBy.name : 'Unknown'}</span>
                                             <span>•</span>
-                                            <span>{selectedAd.requestedBy?.college}</span>
+                                            <span>{typeof selectedAd.requestedBy === 'object' ? selectedAd.requestedBy.college : 'N/A'}</span>
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
@@ -960,7 +960,7 @@ export function AdManagement() {
                                                 <form
                                                     onSubmit={(e) => {
                                                         e.preventDefault();
-                                                        updateAdMutation.mutate({ id: selectedAd._id, data: formData });
+                                                        updateAdMutation.mutate({ id: selectedAd._id || '', data: formData as unknown as Partial<Ad> });
                                                         setSelectedAd(null);
                                                     }}
                                                     className="space-y-4 py-4"
@@ -1006,14 +1006,14 @@ export function AdManagement() {
                                                 <p className="text-xs text-muted-foreground">Total Views Delivered</p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-xl font-bold text-slate-400">/ {selectedAd.maxTotalViews}</p>
+                                                <p className="text-xl font-bold text-slate-400">/ {selectedAd.maxTotalViews || '∞'}</p>
                                                 <p className="text-xs text-muted-foreground">Target Goal</p>
                                             </div>
                                         </div>
                                         <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden">
                                             <div
                                                 className={`h-full rounded-full transition-all duration-500 ${selectedAd.isActive ? 'bg-primary' : 'bg-slate-400'}`}
-                                                style={{ width: `${Math.min(100, (selectedAd.totalViewsCount / selectedAd.maxTotalViews) * 100)}%` }}
+                                                style={{ width: `${Math.min(100, (selectedAd.totalViewsCount / (selectedAd.maxTotalViews || 1)) * 100)}%` }}
                                             />
                                         </div>
                                     </div>
