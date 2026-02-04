@@ -242,3 +242,10 @@ Contributions, feedback, and feature ideas are welcome.
 
 ### 🧠 Built With Vision
 **Campus Hub** is not just an app—it's a **digital campus ecosys
+
+
+
+
+
+
+this is my prototype link = https://college-hub-amber.vercel.app/
